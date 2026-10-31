@@ -1,6 +1,7 @@
 // We Brand 360 - database schema
 // Phase 1: accounts, users, countries. Phase 2: credits ledger and balances.
 // Phase 3: sender numbers, message templates, messages (also the sending queue), webhook log.
+// Phase 4: campaigns, opt-outs, uploaded media.
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
@@ -18,6 +19,12 @@ import {
   varchar,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+
+export interface CampaignDefaults {
+  message?: string;
+  callNumber?: string;
+  visitUrl?: string;
+}
 
 /** ADMIN = platform owner, RESELLER = can create accounts below it, CUSTOMER = end business. */
 export const accountType = pgEnum('account_type', ['ADMIN', 'RESELLER', 'CUSTOMER']);
@@ -50,6 +57,8 @@ export const accounts = pgTable(
     domain: varchar('domain', { length: 253 }).unique(),
     brandName: varchar('brand_name', { length: 120 }),
     logoUrl: text('logo_url'),
+    /** "Set as default values" in the campaign composer. */
+    campaignDefaults: jsonb('campaign_defaults').$type<CampaignDefaults>(),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -298,6 +307,7 @@ export const messageStatus = pgEnum('message_status', [
   'READ',
   'FAILED',
   'RECEIVED',
+  'CANCELLED',
 ]);
 export type MessageStatus = (typeof messageStatus.enumValues)[number];
 export const messageKind = pgEnum('message_kind', ['TEMPLATE', 'TEXT', 'IMAGE', 'INTERACTIVE', 'OTHER']);
@@ -337,6 +347,10 @@ export const messages = pgTable(
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
     lockedAt: timestamp('locked_at', { withTimezone: true }),
     campaignId: uuid('campaign_id'),
+    /** ISO country of the contact, for per-country credits and reports. */
+    countryCode: varchar('country_code', { length: 2 }),
+    /** Set when the credit for this message was given back (failed or cancelled). */
+    refundedAt: timestamp('refunded_at', { withTimezone: true }),
     /** For replies: the outgoing message this one answers, when WhatsApp tells us. */
     replyToProviderId: varchar('reply_to_provider_id', { length: 128 }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
@@ -367,4 +381,104 @@ export const webhookEvents = pgTable(
     error: text('error'),
   },
   (t) => [index('webhook_events_received_idx').on(t.receivedAt)],
+);
+
+// ---------------------------------------------------------------------------
+// Phase 4: campaigns
+// ---------------------------------------------------------------------------
+
+/** Images people upload (campaign pictures). Files live in UPLOAD_DIR; WhatsApp fetches them by link. */
+export const media = pgTable('media', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  accountId: uuid('account_id')
+    .notNull()
+    .references(() => accounts.id),
+  fileName: varchar('file_name', { length: 80 }).notNull(), // stored name: <id>.<ext>
+  originalName: varchar('original_name', { length: 255 }),
+  mimeType: varchar('mime_type', { length: 50 }).notNull(),
+  size: integer('size').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const campaignStatus = pgEnum('campaign_status', [
+  'PENDING_APPROVAL', // waiting for WhatsApp to approve the message
+  'SENDING',
+  'COMPLETED',
+  'CANCELLED',
+  'REJECTED', // WhatsApp did not approve the message; credits returned
+]);
+export type CampaignStatus = (typeof campaignStatus.enumValues)[number];
+
+export interface CampaignContent {
+  imageUrl?: string;
+  message: string;
+  callNumber?: string;
+  visitUrl?: string;
+}
+
+export interface CampaignCountry {
+  code: string;
+  name: string;
+  recipients: number;
+  credits: number;
+}
+
+export const campaigns = pgTable(
+  'campaigns',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    campaignNo: varchar('campaign_no', { length: 8 }).notNull().unique(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    service: service('service').notNull(),
+    title: varchar('title', { length: 150 }).notNull(),
+    senderNumberId: uuid('sender_number_id')
+      .notNull()
+      .references(() => senderNumbers.id),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => messageTemplates.id),
+    content: jsonb('content').$type<CampaignContent>().notNull(),
+    status: campaignStatus('status').notNull(),
+    isDemo: boolean('is_demo').notNull().default(false),
+    /** What was pasted, and what happened to it. */
+    totalNumbers: integer('total_numbers').notNull(),
+    invalidNumbers: integer('invalid_numbers').notNull(),
+    duplicateNumbers: integer('duplicate_numbers').notNull(),
+    optedOutNumbers: integer('opted_out_numbers').notNull(),
+    recipients: integer('recipients').notNull(),
+    byCountry: jsonb('by_country').$type<CampaignCountry[]>().notNull(),
+    creditsCharged: integer('credits_charged').notNull(),
+    creditsRefunded: integer('credits_refunded').notNull().default(0),
+    rejectionReason: text('rejection_reason'),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index('campaigns_account_idx').on(t.accountId, t.submittedAt),
+    index('campaigns_status_idx').on(t.status),
+  ],
+);
+
+/** Contacts who said STOP. Nothing more is sent to them from that number. */
+export const optOuts = pgTable(
+  'opt_outs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    senderNumberId: uuid('sender_number_id')
+      .notNull()
+      .references(() => senderNumbers.id),
+    contactPhone: varchar('contact_phone', { length: 20 }).notNull(),
+    contactName: varchar('contact_name', { length: 120 }),
+    /** The account whose message they were answering (for listing). */
+    accountId: uuid('account_id').references(() => accounts.id),
+    mode: varchar('mode', { length: 10 }).notNull(), // AUTO | MANUAL
+    remarks: varchar('remarks', { length: 255 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('opt_outs_number_contact_uq').on(t.senderNumberId, t.contactPhone)],
 );

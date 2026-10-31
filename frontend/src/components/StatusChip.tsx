@@ -1,6 +1,6 @@
 import { Chip } from '@mui/material';
-import type { MessageStatus, TemplateStatus } from '@/lib/api';
-import { messageStatusLabel, templateStatusLabel } from '@/lib/format';
+import type { CampaignStatus, MessageStatus, TemplateStatus } from '@/lib/api';
+import { campaignStatusLabel, messageStatusLabel, templateStatusLabel } from '@/lib/format';
 import { brand } from '@/lib/theme';
 
 type Tone = 'good' | 'wait' | 'bad' | 'plain';
@@ -19,6 +19,7 @@ const messageTone: Record<MessageStatus, Tone> = {
   READ: 'good',
   FAILED: 'bad',
   RECEIVED: 'good',
+  CANCELLED: 'plain',
 };
 const templateTone: Record<TemplateStatus, Tone> = {
   DRAFT: 'plain',
@@ -42,4 +43,17 @@ export function TemplateStatusChip({ status }: { status: TemplateStatus }) {
 export function ToneChip({ label, tone }: { label: string; tone: Tone }) {
   const t = tones[tone];
   return <Chip size="small" label={label} sx={{ bgcolor: t.bg, color: t.fg }} />;
+}
+
+const campaignTone: Record<CampaignStatus, Tone> = {
+  PENDING_APPROVAL: 'wait',
+  SENDING: 'plain',
+  COMPLETED: 'good',
+  CANCELLED: 'plain',
+  REJECTED: 'bad',
+};
+
+export function CampaignStatusChip({ status }: { status: CampaignStatus }) {
+  const t = tones[campaignTone[status]];
+  return <Chip size="small" label={campaignStatusLabel[status]} sx={{ bgcolor: t.bg, color: t.fg }} />;
 }

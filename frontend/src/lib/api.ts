@@ -176,7 +176,7 @@ export async function downloadCsv(path: string, query: Record<string, unknown>, 
 
 export type ProviderKind = 'META' | 'TEST';
 export type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAUSED' | 'DISABLED';
-export type MessageStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'RECEIVED';
+export type MessageStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'RECEIVED' | 'CANCELLED';
 
 export interface SenderNumber {
   id: string;
@@ -258,4 +258,139 @@ export interface GatewaySetup {
   platformTokenSet: boolean;
   appIdSet: boolean;
   workerRunning: boolean;
+}
+
+// ---------------------------------------------------------------- campaigns (Phase 4)
+
+export type CampaignStatus = 'PENDING_APPROVAL' | 'SENDING' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
+
+export interface CampaignStats {
+  queued: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  cancelled: number;
+  replies: number;
+}
+
+export interface CampaignCountry {
+  code: string;
+  name: string;
+  recipients: number;
+  credits: number;
+  balance?: number | null;
+  enough?: boolean;
+}
+
+export interface CampaignListItem {
+  id: string;
+  campaignNo: string;
+  accountId: string;
+  accountUsername: string;
+  accountName: string;
+  service: Service;
+  title: string;
+  status: CampaignStatus;
+  isDemo: boolean;
+  recipients: number;
+  creditsCharged: number;
+  creditsRefunded: number;
+  submittedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  stats: CampaignStats | null;
+}
+
+export interface CampaignDetail extends CampaignListItem {
+  content: { imageUrl?: string; message: string; callNumber?: string; visitUrl?: string };
+  totalNumbers: number;
+  invalidNumbers: number;
+  duplicateNumbers: number;
+  optedOutNumbers: number;
+  byCountry: CampaignCountry[];
+  rejectionReason: string | null;
+  createdBy: string | null;
+  templateStatus: TemplateStatus;
+  failureReasons: { reason: string | null; code: string | null; n: number }[];
+}
+
+export interface RecipientCheck {
+  total: number;
+  valid: number;
+  invalid: number;
+  duplicates: number;
+  optedOut: number;
+  countryOff: number;
+  recipients: number;
+  invalidSamples: string[];
+  byCountry: CampaignCountry[];
+  creditsNeeded: number;
+  enoughCredits: boolean;
+  isDemo: boolean;
+  problem: string | null;
+  limits: { demoMax: number; min: number; max: number };
+}
+
+export interface CampaignRecipient {
+  id: string;
+  contactPhone: string;
+  countryCode: string | null;
+  status: MessageStatus;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  readAt: string | null;
+  failedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+export interface Conversation {
+  senderNumberId: string;
+  contactPhone: string;
+  contactName: string | null;
+  lastAt: string;
+  lastBody: string | null;
+  lastDirection: 'IN' | 'OUT';
+  inbound: number;
+  lastInboundAt: string | null;
+  numberLabel: string;
+}
+
+export interface ThreadMessage {
+  id: string;
+  direction: 'IN' | 'OUT';
+  body: string | null;
+  kind: string;
+  status: MessageStatus;
+  createdAt: string;
+  errorMessage: string | null;
+  campaignId: string | null;
+  campaignNo: string | null;
+  imageUrl: string | null;
+}
+
+export interface Thread {
+  contactPhone: string;
+  contactName: string | null;
+  canReply: boolean;
+  replyWindowEndsAt: string | null;
+  messages: ThreadMessage[];
+}
+
+/** Uploads one file (multipart). */
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append('file', file);
+  const token = tokenStore.get();
+  const res = await fetch(API_URL + path, {
+    method: 'POST',
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+    body: form,
+  }).catch(() => {
+    throw new ApiError('Cannot reach the server. Check your internet connection.', 0);
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError((Array.isArray(data?.message) ? data.message[0] : data?.message) || 'Upload failed', res.status);
+  return data as T;
 }

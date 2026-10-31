@@ -1,12 +1,15 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   // rawBody: needed to check WhatsApp webhook signatures
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.setGlobalPrefix('api');
+  // Campaign recipient lists can be large (1 lakh numbers is about 1.5 MB)
+  app.useBodyParser('json', { limit: '5mb' });
   app.enableCors({
     origin: (process.env.CORS_ORIGINS || 'http://localhost:3000').split(',').map((o) => o.trim()),
     credentials: true,

@@ -59,6 +59,7 @@ const RANK: Record<MessageStatus, number> = {
   DELIVERED: 3,
   READ: 4,
   FAILED: 5,
+  CANCELLED: 6,
   RECEIVED: 0,
 };
 
@@ -71,6 +72,8 @@ export interface EnqueueItem {
   payload?: TemplatePayload;
   text?: string;
   campaignId?: string;
+  /** ISO country of the contact. */
+  countryCode?: string;
 }
 
 /** Fills {{1}}, {{2}}... with values, for showing the message in the inbox. */
@@ -363,9 +366,10 @@ export class GatewayService implements OnModuleInit {
 
   /**
    * Adds outgoing messages to the sending queue. Pass `tx` to save them together with a campaign.
+   * `held`: the template is still waiting for approval; the messages wait until release() is called.
    * Returns the new message ids in the same order.
    */
-  async enqueue(items: EnqueueItem[], tx: Tx | Db = this.db): Promise<string[]> {
+  async enqueue(items: EnqueueItem[], tx: Tx | Db = this.db, opts: { held?: boolean } = {}): Promise<string[]> {
     if (items.length === 0) return [];
     const templateIds = [...new Set(items.map((i) => i.templateId).filter(Boolean))] as string[];
     const templates = templateIds.length
@@ -373,7 +377,8 @@ export class GatewayService implements OnModuleInit {
       : [];
     const byId = new Map(templates.map((t) => [t.id, t]));
     for (const t of templates) {
-      if (t.status !== 'APPROVED') throw new BadRequestException(`Template "${t.name}" is not approved yet`);
+      const ok = t.status === 'APPROVED' || (opts.held && (t.status === 'PENDING' || t.status === 'DRAFT'));
+      if (!ok) throw new BadRequestException(`Template "${t.name}" is not approved yet`);
     }
 
     const now = new Date();
@@ -394,13 +399,35 @@ export class GatewayService implements OnModuleInit {
           payload: it.payload ?? null,
           body: t ? renderBody(t.content.body, it.payload?.bodyParams) : (it.text ?? ''),
           status: 'QUEUED' as const,
-          nextAttemptAt: now,
+          // Held messages have no send time, so the worker leaves them alone
+          nextAttemptAt: opts.held ? null : now,
           campaignId: it.campaignId ?? null,
+          countryCode: it.countryCode ?? null,
         };
       });
       await tx.insert(messages).values(rows);
     }
     return ids;
+  }
+
+  /** Starts sending held messages of a campaign (its template was approved). */
+  async releaseCampaign(campaignId: string, tx: Tx | Db = this.db) {
+    const rows = await tx
+      .update(messages)
+      .set({ nextAttemptAt: new Date() })
+      .where(and(eq(messages.campaignId, campaignId), eq(messages.status, 'QUEUED'), isNull(messages.nextAttemptAt)))
+      .returning({ id: messages.id });
+    return rows.length;
+  }
+
+  /** Stops messages of a campaign that haven't gone out yet. Returns how many. */
+  async cancelQueued(campaignId: string, reason: string, tx: Tx | Db = this.db) {
+    const rows = await tx
+      .update(messages)
+      .set({ status: 'CANCELLED', errorCode: 'CANCELLED', errorMessage: reason, nextAttemptAt: null })
+      .where(and(eq(messages.campaignId, campaignId), eq(messages.status, 'QUEUED')))
+      .returning({ id: messages.id });
+    return rows.length;
   }
 
   /** Admin "send a test message" from one number. Not charged. */

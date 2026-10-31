@@ -21,8 +21,14 @@ templates with approval tracking, a sending queue with per-number speed limits a
 webhooks for delivery/read/failed and replies, admin pages for numbers, templates, test messages and
 the message log.
 
-Next phases: Premium Campaigns → Branded Campaigns → Bot Studio → dashboard charts. Menu items for
-these show "Soon" until built.
+**Phase 4 (done):** Premium Campaigns. Composer with live number check (valid, invalid,
+duplicate, opted out, country switched off), image upload, message, Call and Website buttons, saved
+defaults, live WhatsApp preview and credits per country; campaigns for yourself or any account
+below you; reports with live delivery, failure reasons, recipient list, CSV download and stop;
+incoming-messages inbox with campaign tags and 24-hour replies; automatic STOP opt-outs.
+
+Next phases: Branded Campaigns → Bot Studio → dashboard charts. Menu items for these show "Soon"
+until built.
 
 ## Run on your computer
 
@@ -90,6 +96,25 @@ Log in with the `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` from `backend/.e
 - Access tokens are stored encrypted with `ENCRYPTION_KEY`.
 - Other modules react to `gateway.message.status`, `gateway.message.received` and
   `gateway.template.status` events (campaign refunds and opt-outs hook in here in Phase 4).
+
+### Campaigns
+
+- WhatsApp only lets a business start a chat with an approved template, so each new message text
+  is turned into a template automatically (`wb_<hash>`) and submitted. The campaign waits as
+  *Waiting for approval* and starts by itself when WhatsApp approves. A message already approved
+  is reused and sends at once; the image changes per campaign without new approval.
+- Credits are taken when the campaign is submitted (1 per recipient, per country) in the same
+  transaction that queues the messages: not enough credits = nothing saved.
+- Failed and stopped messages get their credit back automatically (one ledger row per country,
+  never twice). A rejected message returns every credit.
+- Limits (in `.env`): up to `CAMPAIGN_DEMO_MAX` (10) recipients is a demo; full campaigns need
+  `CAMPAIGN_MIN_RECIPIENTS` (1,000) to `CAMPAIGN_MAX_RECIPIENTS` (1,00,000).
+- Replies like STOP / unsubscribe add the contact to the number's opt-out list; they are left out
+  of every later campaign from that number, and not charged.
+- Images are stored in `UPLOAD_DIR` and served at `/api/media/...` because WhatsApp downloads them
+  by link. Back that folder up with the database.
+- Inbox replies are free-form text and only possible within 24 hours of the contact's last
+  message (WhatsApp rule). They are not charged in credits.
 
 ## Connecting WhatsApp (Meta)
 

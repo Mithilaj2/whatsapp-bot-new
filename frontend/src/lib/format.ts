@@ -33,6 +33,7 @@ export const messageStatusLabel = {
   READ: 'Read',
   FAILED: 'Failed',
   RECEIVED: 'Received',
+  CANCELLED: 'Cancelled',
 } as const;
 
 export const templateStatusLabel = {
@@ -49,3 +50,24 @@ export const formatPhone = (digits: string) =>
   digits.startsWith('91') && digits.length === 12
     ? `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`
     : `+${digits}`;
+
+export const campaignStatusLabel = {
+  PENDING_APPROVAL: 'Waiting for approval',
+  SENDING: 'Sending',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Stopped',
+  REJECTED: 'Not approved',
+} as const;
+
+/** "2 min 5 s" between two times. */
+export function formatDuration(from?: string | null, to?: string | null) {
+  if (!from || !to) return '—';
+  const s = Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 1000));
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ${s % 60} s`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+export const timeOnly = (iso: string) =>
+  new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));

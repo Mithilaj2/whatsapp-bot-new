@@ -33,9 +33,9 @@ export const nav: NavSection[] = [
     label: 'Premium Campaigns',
     icon: CampaignOutlined,
     children: [
-      { label: 'New campaign', href: '/campaigns/premium/new', soon: true },
-      { label: 'Reports', href: '/campaigns/premium/reports', soon: true },
-      { label: 'Incoming messages', href: '/campaigns/premium/inbox', soon: true },
+      { label: 'New campaign', href: '/campaigns/premium/new' },
+      { label: 'Reports', href: '/campaigns/premium/reports' },
+      { label: 'Incoming messages', href: '/campaigns/premium/inbox' },
     ],
   },
   {

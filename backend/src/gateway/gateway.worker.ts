@@ -59,7 +59,7 @@ export class GatewayWorker implements OnApplicationBootstrap, OnApplicationShutd
         const claimed = await this.claim();
         if (claimed.length) await this.sendAll(claimed);
         // Busy: go again straight away. Idle: check every half second.
-        if (claimed.length < BATCH) await sleep(500);
+        else await sleep(500);
       } catch (e) {
         this.log.error(`Worker error: ${(e as Error).message}`);
         await sleep(2000);
@@ -68,14 +68,26 @@ export class GatewayWorker implements OnApplicationBootstrap, OnApplicationShutd
     this.running = false;
   }
 
-  /** Takes up to BATCH due messages and marks them SENDING so no other worker takes them. */
+  /**
+   * Takes due messages and marks them SENDING so no other worker takes them. Per number, only about
+   * two seconds' worth at its speed limit: the rest stays QUEUED, so stopping a campaign still
+   * catches it and one slow number doesn't hold up the others.
+   */
   private async claim(): Promise<MessageRow[]> {
     const res = await this.db.execute<{ id: string }>(sql`
       update ${messages} set status = 'SENDING', locked_at = now(), attempts = attempts + 1, updated_at = now()
       where id in (
         select id from ${messages}
-        where status = 'QUEUED' and next_attempt_at <= now()
-        order by next_attempt_at
+        where status = 'QUEUED' and id in (
+          select id from (
+            select m.id, n.rate_per_second,
+              row_number() over (partition by m.sender_number_id order by m.next_attempt_at) as rn
+            from ${messages} m
+            join ${senderNumbers} n on n.id = m.sender_number_id
+            where m.status = 'QUEUED' and m.next_attempt_at <= now()
+          ) due
+          where due.rn <= greatest(1, due.rate_per_second * 2)
+        )
         limit ${BATCH}
         for update skip locked
       )

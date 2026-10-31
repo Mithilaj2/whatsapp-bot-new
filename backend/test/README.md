@@ -11,11 +11,13 @@ Plain bash + curl + jq scripts that run against a real API and database.
    META_VERIFY_TOKEN="verify123"
    META_APP_ID="999"
    TEST_PROVIDER_SPEED=3
+   CAMPAIGN_MIN_RECIPIENTS=20
    ```
 3. Start the API (`npm run build && npm start`), then run:
    ```
    bash test/accounts.e2e.sh
    bash test/credits.e2e.sh
    bash test/gateway.e2e.sh
+   bash test/campaigns.e2e.sh
    ```
    Run `accounts` first on a fresh database: it counts all accounts the admin can see.

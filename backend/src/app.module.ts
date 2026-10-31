@@ -12,6 +12,10 @@ import { CreditsModule } from './credits/credits.module';
 import { HealthController } from './common/health.controller';
 import { DbModule } from './db/db.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
+import { InboxModule } from './inbox/inbox.module';
+import { MediaModule } from './media/media.module';
+import { OptOutsModule } from './optouts/optouts.module';
 
 @Module({
   imports: [
@@ -24,6 +28,10 @@ import { GatewayModule } from './gateway/gateway.module';
     BrandingModule,
     CreditsModule,
     GatewayModule,
+    MediaModule,
+    OptOutsModule,
+    CampaignsModule,
+    InboxModule,
   ],
   controllers: [HealthController],
   providers: [
