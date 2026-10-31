@@ -58,7 +58,7 @@ export const nav: NavSection[] = [
       { label: 'Transactions', href: '/credits/transactions' },
     ],
   },
-  { label: 'Bot Studio', icon: SmartToyOutlined, href: '/bots', soon: true },
+  { label: 'Bot Studio', icon: SmartToyOutlined, href: '/bots' },
   {
     label: 'Resellers & Customers',
     icon: StorefrontOutlined,

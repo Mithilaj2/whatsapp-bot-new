@@ -227,6 +227,12 @@ export class SimulateInboundDto {
   @IsUUID()
   senderNumberId: string;
 
+  /** As if the contact tapped the button or list row with this id. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  replyId?: string;
+
   @Transform(digitsOnly)
   @Matches(/^\d{8,15}$/)
   from: string;

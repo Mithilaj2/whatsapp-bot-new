@@ -32,6 +32,17 @@ http
       const auth = req.headers['authorization'] || '';
       calls.push({ t: Date.now(), method: req.method, path, body, auth, bytes: raw.length });
 
+      // Fake Anthropic Messages API for bot AI answers: replies with the knowledge line that shares a
+      // word with the question, or NO_ANSWER
+      if (path === '/v1/messages' && req.method === 'POST') {
+        if (req.headers['x-api-key'] !== 'test-ai-key') return send(res, 401, { type: 'error', error: { message: 'invalid x-api-key' } });
+        const knowledge = (body.system.match(/<business_information>\n([\s\S]*)\n<\/business_information>/) || [])[1] || '';
+        const q = String(body.messages[body.messages.length - 1].content).toLowerCase();
+        const words = q.split(/\W+/).filter((w) => w.length > 3);
+        const line = knowledge.split('\n').find((l) => words.some((w) => l.toLowerCase().includes(w)));
+        return send(res, 200, { content: [{ type: 'text', text: line ? `As per our info: ${line.trim()}` : 'NO_ANSWER' }] });
+      }
+
       if (!auth.includes('good-token')) return send(res, 401, metaError(190, 'Invalid OAuth access token'));
 
       // POST /v23.0/{phone-number-id}/messages

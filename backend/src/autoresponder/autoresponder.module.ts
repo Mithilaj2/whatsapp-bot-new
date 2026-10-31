@@ -18,7 +18,7 @@ import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-val
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { AuthUser, CurrentUser } from '../auth/decorators';
 import { Db, InjectDb } from '../db/db.module';
-import { accounts, autoResponders, brands, messages, senderNumbers } from '../db/schema';
+import { accounts, autoResponders, bots, brands, messages, senderNumbers } from '../db/schema';
 import { GatewayModule } from '../gateway/gateway.module';
 import { GatewayEvents, GatewayService, MessageRow } from '../gateway/gateway.service';
 import { isStopReply } from '../optouts/optouts.service';
@@ -131,6 +131,14 @@ export class AutoResponderService {
       const kind = isStopReply(message.body) ? 'optout' : 'normal';
       const text = kind === 'optout' ? r.optOutMessage : r.normalMessage;
       if (!text) return;
+      if (kind === 'normal') {
+        // A bot on this number answers instead
+        const [bot] = await this.db
+          .select({ id: bots.id })
+          .from(bots)
+          .where(and(eq(bots.senderNumberId, message.senderNumberId), eq(bots.isActive, true)));
+        if (bot) return;
+      }
 
       // Once a day per person and kind
       const [already] = await this.db

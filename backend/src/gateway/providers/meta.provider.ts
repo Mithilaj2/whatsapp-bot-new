@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';
-import type { TemplatePayload } from '../../db/schema';
+import type { RichMessage, TemplatePayload } from '../../db/schema';
 import {
   MessagingProvider,
   NumberInfo,
@@ -104,6 +104,42 @@ export class MetaProvider implements MessagingProvider {
     const res = await this.graph<{ messages: { id: string }[] }>(creds.accessToken, `${creds.phoneNumberId}/messages`, {
       method: 'POST',
       body: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body: text } },
+    });
+    return res.messages[0].id;
+  }
+
+  async sendRich(creds: SenderCreds, to: string, m: RichMessage) {
+    let body: Record<string, unknown>;
+    if (m.kind === 'image') {
+      body = { type: 'image', image: { link: m.imageUrl, ...(m.caption ? { caption: m.caption } : {}) } };
+    } else if (m.kind === 'buttons') {
+      body = {
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          ...(m.imageUrl ? { header: { type: 'image', image: { link: m.imageUrl } } } : {}),
+          body: { text: m.body },
+          ...(m.footer ? { footer: { text: m.footer } } : {}),
+          action: { buttons: m.buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title } })) },
+        },
+      };
+    } else {
+      body = {
+        type: 'interactive',
+        interactive: {
+          type: 'list',
+          body: { text: m.body },
+          ...(m.footer ? { footer: { text: m.footer } } : {}),
+          action: {
+            button: m.button,
+            sections: [{ title: m.button.slice(0, 24), rows: m.rows.map((r) => ({ id: r.id, title: r.title, ...(r.description ? { description: r.description } : {}) })) }],
+          },
+        },
+      };
+    }
+    const res = await this.graph<{ messages: { id: string }[] }>(creds.accessToken, `${creds.phoneNumberId}/messages`, {
+      method: 'POST',
+      body: { messaging_product: 'whatsapp', recipient_type: 'individual', to, ...body },
     });
     return res.messages[0].id;
   }
@@ -253,6 +289,7 @@ export class MetaProvider implements MessagingProvider {
                       : 'OTHER',
               text,
               replyToProviderId: m.context?.id,
+              replyId: m.interactive?.button_reply?.id ?? m.interactive?.list_reply?.id ?? m.button?.payload,
             });
           }
         } else if (change.field === 'message_template_status_update') {

@@ -22,6 +22,7 @@ import {
   Provider,
   senderNumbers,
   TemplateContent,
+  RichMessage,
   TemplatePayload,
   TemplateStatus,
 } from '../db/schema';
@@ -71,9 +72,17 @@ export interface EnqueueItem {
   templateId?: string;
   payload?: TemplatePayload;
   text?: string;
+  /** Buttons, list or image (free-form, inside the 24-hour window). Put it in payload.rich. */
   campaignId?: string;
   /** ISO country of the contact. */
   countryCode?: string;
+}
+
+/** Text shown in the inbox for a buttons / list / image message. */
+export function richBody(m: RichMessage) {
+  if (m.kind === 'image') return m.caption ?? '';
+  if (m.kind === 'buttons') return `${m.body}\n${m.buttons.map((b) => `[${b.title}]`).join(' ')}`;
+  return `${m.body}\n${m.rows.map((r) => `- ${r.title}`).join('\n')}`;
 }
 
 /** Fills {{1}}, {{2}}... with values, for showing the message in the inbox. */
@@ -383,8 +392,10 @@ export class GatewayService implements OnModuleInit {
 
     const now = new Date();
     const ids: string[] = [];
+    // A few messages at once (a bot's reply) keep their order: each is due 1 ms after the last
+    const ordered = items.length <= 20;
     for (let i = 0; i < items.length; i += 1000) {
-      const rows = items.slice(i, i + 1000).map((it) => {
+      const rows = items.slice(i, i + 1000).map((it, j) => {
         const t = it.templateId ? byId.get(it.templateId) : undefined;
         const id = randomUUID();
         ids.push(id);
@@ -394,13 +405,23 @@ export class GatewayService implements OnModuleInit {
           senderNumberId: it.senderNumberId,
           direction: 'OUT' as const,
           contactPhone: it.to,
-          kind: t ? ('TEMPLATE' as const) : ('TEXT' as const),
+          kind: t
+            ? ('TEMPLATE' as const)
+            : it.payload?.rich
+              ? it.payload.rich.kind === 'image'
+                ? ('IMAGE' as const)
+                : ('INTERACTIVE' as const)
+              : ('TEXT' as const),
           templateId: t?.id ?? null,
           payload: it.payload ?? null,
-          body: t ? renderBody(t.content.body, it.payload?.bodyParams) : (it.text ?? ''),
+          body: t
+            ? renderBody(t.content.body, it.payload?.bodyParams)
+            : it.payload?.rich
+              ? richBody(it.payload.rich)
+              : (it.text ?? ''),
           status: 'QUEUED' as const,
           // Held messages have no send time, so the worker leaves them alone
-          nextAttemptAt: opts.held ? null : now,
+          nextAttemptAt: opts.held ? null : ordered ? new Date(now.getTime() + i + j) : now,
           campaignId: it.campaignId ?? null,
           countryCode: it.countryCode ?? null,
         };
@@ -600,6 +621,7 @@ export class GatewayService implements OnModuleInit {
         status: 'RECEIVED',
         providerMessageId: e.providerMessageId,
         replyToProviderId: e.replyToProviderId ?? null,
+        payload: e.replyId ? { replyId: e.replyId } : null,
         campaignId,
         createdAt: e.at,
       })

@@ -95,6 +95,6 @@ export class GatewayController {
   async simulateInbound(@Body() dto: SimulateInboundDto) {
     const n = await this.gateway.getNumber(dto.senderNumberId);
     if (n.provider !== 'TEST') throw new BadRequestException('Only works for test-mode numbers');
-    return { id: this.test.simulateInbound(this.gateway.creds(n), dto.from, dto.text, dto.name) };
+    return { id: this.test.simulateInbound(this.gateway.creds(n), dto.from, dto.text, dto.name, undefined, dto.replyId) };
   }
 }

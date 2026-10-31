@@ -94,7 +94,8 @@ export class GatewayWorker implements OnApplicationBootstrap, OnApplicationShutd
       returning id`);
     const ids = res.rows.map((r) => r.id);
     if (!ids.length) return [];
-    return this.db.select().from(messages).where(inArray(messages.id, ids));
+    // Oldest first, so a bot's messages to one person go out in order
+    return this.db.select().from(messages).where(inArray(messages.id, ids)).orderBy(messages.nextAttemptAt, messages.createdAt);
   }
 
   private async sendAll(batch: MessageRow[]) {
@@ -143,7 +144,9 @@ export class GatewayWorker implements OnApplicationBootstrap, OnApplicationShutd
             { name: t.name, language: t.language, category: t.category, content: t.content },
             (m.payload ?? {}) as TemplatePayload,
           )
-        : await provider.sendText(creds, m.contactPhone, m.body ?? '');
+        : (m.payload as TemplatePayload | null)?.rich
+          ? await provider.sendRich(creds, m.contactPhone, (m.payload as TemplatePayload).rich!)
+          : await provider.sendText(creds, m.contactPhone, m.body ?? '');
 
       const [row] = await this.db
         .update(messages)

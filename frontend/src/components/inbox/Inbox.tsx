@@ -59,7 +59,10 @@ export default function Inbox({ service, title }: { service: Service; title: str
     }, 8000);
     return () => clearInterval(t);
   }, [loadList, loadThread]);
-  useEffect(() => bottom.current?.scrollIntoView({ block: 'end' }), [thread?.messages.length]);
+  // Braces matter: newer browsers return a promise from scrollIntoView, which React would call as cleanup
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: 'end' });
+  }, [thread?.messages.length]);
 
   async function send(e: FormEvent) {
     e.preventDefault();
@@ -226,10 +229,12 @@ export default function Inbox({ service, title }: { service: Service; title: str
                           {m.body || 'Media message'}
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75, mt: 0.5 }}>
-                          {m.auto && (
-                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: brand.pine }}>Auto reply</Typography>
+                          {(m.auto || m.bot) && (
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: brand.pine }}>
+                              {m.auto ? 'Auto reply' : m.ai ? 'AI answer' : 'Bot'}
+                            </Typography>
                           )}
-                          {m.campaignNo && !m.auto && (
+                          {m.campaignNo && !m.auto && !m.bot && (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, fontSize: '0.75rem', fontWeight: 600, color: brand.action }}>
                               <CampaignOutlined sx={{ fontSize: 14 }} />
                               {m.campaignNo}

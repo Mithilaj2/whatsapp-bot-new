@@ -1,4 +1,4 @@
-import type { TemplateContent, TemplatePayload } from '../../db/schema';
+import type { RichMessage, TemplateContent, TemplatePayload } from '../../db/schema';
 
 /** What a provider needs to act for one WhatsApp number. */
 export interface SenderCreds {
@@ -51,6 +51,8 @@ export type ProviderEvent =
       type: 'TEXT' | 'IMAGE' | 'INTERACTIVE' | 'OTHER';
       text?: string;
       replyToProviderId?: string;
+      /** Id of the tapped button or list row. */
+      replyId?: string;
     }
   | {
       kind: 'template';
@@ -77,6 +79,8 @@ export interface NumberInfo {
 export interface MessagingProvider {
   sendTemplate(creds: SenderCreds, to: string, template: TemplateRef, payload: TemplatePayload): Promise<string>;
   sendText(creds: SenderCreds, to: string, text: string): Promise<string>;
+  /** Buttons, list menu or image (inside the 24-hour window). */
+  sendRich(creds: SenderCreds, to: string, message: RichMessage): Promise<string>;
   /** Submits a template for approval. Returns the provider's template id. */
   createTemplate(creds: SenderCreds, template: TemplateRef): Promise<{ id: string; status: string }>;
   getTemplateStatus(creds: SenderCreds, providerTemplateId: string): Promise<{ status: string; reason?: string }>;

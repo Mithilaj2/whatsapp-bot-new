@@ -33,7 +33,13 @@ Branded composer with brand selector, preview under the brand's name, Branded cr
 minimum; branded reports, incoming messages, auto responder (normal reply and STOP reply) and an
 opt-outs page with manual blocking.
 
-Next phases: Bot Studio → dashboard charts. Menu items for these show "Soon" until built.
+**Phase 6 (done):** Bot Studio. Chatbots on a customer's own number: steps (message, buttons,
+list menu, question that saves the answer, talk to a person), keywords that start or restart the
+bot, what to do when nothing matches (start anyway, fixed message, AI answer, nothing), AI answers
+from the business information, a test chat that runs the unsaved bot, and a Chats tab with every
+person's answers, hand-overs and CSV download.
+
+Next phase: dashboard charts and notifications.
 
 ## Run on your computer
 
@@ -139,6 +145,24 @@ Log in with the `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` from `backend/.e
   not on numbers that belong to someone else.
 - Later: once We Brand 360 is a Meta *Tech Provider*, customers can connect their own number with
   Embedded Signup instead of the admin doing it.
+
+### Bot Studio
+
+- One live bot per WhatsApp number. Customers and resellers can put bots on their brands' numbers;
+  the platform admin on any number. A bot can only go live when its flow has no problems (missing
+  steps, too-long button text and so on); the editor lists them.
+- Bot replies, buttons and menus are free-form WhatsApp messages, allowed because the person just
+  wrote. They don't use credits.
+- A chat that gets no answer for `BOT_IDLE_MINUTES` (30) starts fresh next time. After "Talk to a
+  person" the bot stays quiet for that person for `BOT_HANDOFF_HOURS` (24), or until someone clicks
+  *Bot back on* in Chats; the team replies in Incoming messages.
+- With a bot live, the auto responder's normal reply is skipped (the bot answers). STOP still
+  opts the person out and gets the opt-out reply; the bot ignores it.
+- **AI answers** use Claude through the Anthropic API. Set `ANTHROPIC_API_KEY` (from
+  console.anthropic.com) to switch them on; without it the "no answer" message is sent. The AI is
+  told to answer only from the business information and to say it doesn't know otherwise. At most
+  `BOT_AI_DAILY_LIMIT` (20) AI answers per person per day keeps the API bill predictable. The API
+  is billed by Anthropic per use, separately from WhatsApp.
 
 ## Connecting WhatsApp (Meta)
 

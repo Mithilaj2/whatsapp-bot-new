@@ -313,12 +313,35 @@ export const messageStatus = pgEnum('message_status', [
 export type MessageStatus = (typeof messageStatus.enumValues)[number];
 export const messageKind = pgEnum('message_kind', ['TEMPLATE', 'TEXT', 'IMAGE', 'INTERACTIVE', 'OTHER']);
 
-/** What to send for an outgoing template message. */
+/**
+ * A free-form message with buttons, a list menu or an image. Only allowed inside the 24-hour
+ * window after the contact wrote (bots and replies).
+ */
+export type RichMessage =
+  | { kind: 'buttons'; body: string; imageUrl?: string; footer?: string; buttons: { id: string; title: string }[] }
+  | {
+      kind: 'list';
+      body: string;
+      footer?: string;
+      button: string;
+      rows: { id: string; title: string; description?: string }[];
+    }
+  | { kind: 'image'; imageUrl: string; caption?: string };
+
+/** What to send for an outgoing message, plus a few markers. */
 export interface TemplatePayload {
   bodyParams?: string[];
   headerImageUrl?: string;
   /** Set on automatic replies, so we know what was already sent to a contact. */
   auto?: 'normal' | 'optout';
+  /** Buttons, list or image message. */
+  rich?: RichMessage;
+  /** Sent by this bot. */
+  bot?: string;
+  /** Incoming: the id of the button or list row the contact tapped. */
+  replyId?: string;
+  /** Answer written by AI. */
+  ai?: boolean;
 }
 
 /**
@@ -547,3 +570,101 @@ export const autoResponders = pgTable('auto_responders', {
   isActive: boolean('is_active').notNull().default(true),
   ...timestamps,
 });
+
+// ---------------------------------------------------------------------------
+// Phase 6: Bot Studio
+// ---------------------------------------------------------------------------
+
+export type BotNodeType = 'MESSAGE' | 'BUTTONS' | 'LIST' | 'QUESTION' | 'HANDOFF';
+
+/** One step of a bot. */
+export interface BotNode {
+  id: string;
+  type: BotNodeType;
+  /** Shown in the editor only. */
+  name: string;
+  /** What the bot says. {{name}} and {{variable}} are filled in. */
+  text: string;
+  /** MESSAGE: optional image; BUTTONS: optional image header. */
+  imageUrl?: string;
+  /** BUTTONS (1 to 3) and LIST (1 to 10): the choices, each leading to a step. */
+  options?: { id: string; title: string; description?: string; next?: string }[];
+  /** LIST: label of the button that opens the menu. */
+  listButton?: string;
+  /** QUESTION: where the answer is saved. */
+  variable?: string;
+  validation?: 'TEXT' | 'NUMBER' | 'EMAIL' | 'PHONE';
+  /** MESSAGE and QUESTION: the step after this one. None = the chat ends. */
+  next?: string;
+}
+
+export interface BotTrigger {
+  id: string;
+  keywords: string[];
+  match: 'EXACT' | 'CONTAINS';
+  startNodeId: string;
+}
+
+export interface BotFlow {
+  nodes: BotNode[];
+  triggers: BotTrigger[];
+  /** When a message matches no keyword and no chat is going on. */
+  fallback: { mode: 'START' | 'MESSAGE' | 'AI' | 'NONE'; startNodeId?: string; text?: string };
+  ai: {
+    /** What the business wants the AI to know: products, prices, timings, address, policies. */
+    knowledge: string;
+    /** Said when the AI can't answer from the knowledge. */
+    noAnswerText?: string;
+  };
+}
+
+export const bots = pgTable(
+  'bots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    name: varchar('name', { length: 120 }).notNull(),
+    senderNumberId: uuid('sender_number_id').references(() => senderNumbers.id),
+    isActive: boolean('is_active').notNull().default(false),
+    flow: jsonb('flow').$type<BotFlow>().notNull(),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index('bots_account_idx').on(t.accountId),
+    // One live bot per WhatsApp number
+    uniqueIndex('bots_active_number_uq').on(t.senderNumberId).where(sql`${t.isActive}`),
+  ],
+);
+
+export const botSessionStatus = pgEnum('bot_session_status', ['ACTIVE', 'COMPLETED', 'HANDOFF', 'ENDED']);
+
+/** One person's chat with a bot: where they are and what they answered. */
+export const botSessions = pgTable(
+  'bot_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    botId: uuid('bot_id')
+      .notNull()
+      .references(() => bots.id, { onDelete: 'cascade' }),
+    senderNumberId: uuid('sender_number_id')
+      .notNull()
+      .references(() => senderNumbers.id),
+    contactPhone: varchar('contact_phone', { length: 20 }).notNull(),
+    contactName: varchar('contact_name', { length: 120 }),
+    status: botSessionStatus('status').notNull().default('ACTIVE'),
+    /** The step waiting for the person's answer. */
+    nodeId: varchar('node_id', { length: 40 }),
+    variables: jsonb('variables').$type<Record<string, string>>().notNull().default({}),
+    handoffUntil: timestamp('handoff_until', { withTimezone: true }),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('bot_sessions_contact_idx').on(t.senderNumberId, t.contactPhone, t.lastActivityAt),
+    index('bot_sessions_bot_idx').on(t.botId, t.lastActivityAt),
+  ],
+);

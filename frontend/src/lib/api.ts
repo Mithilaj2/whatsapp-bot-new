@@ -373,6 +373,9 @@ export interface ThreadMessage {
   imageUrl: string | null;
   /** Sent by the auto responder. */
   auto: 'normal' | 'optout' | null;
+  /** Sent by a bot; ai = the answer was written by AI. */
+  bot: boolean;
+  ai: boolean;
 }
 
 export interface Thread {
@@ -484,4 +487,114 @@ export interface OptOutNumber {
   label: string;
   phoneNumber: string;
   brandName: string | null;
+}
+
+// ---------------------------------------------------------------- Bot Studio (Phase 6)
+
+export type BotNodeType = 'MESSAGE' | 'BUTTONS' | 'LIST' | 'QUESTION' | 'HANDOFF';
+
+export interface BotOption {
+  id: string;
+  title: string;
+  description?: string;
+  next?: string;
+}
+
+export interface BotNode {
+  id: string;
+  type: BotNodeType;
+  name: string;
+  text: string;
+  imageUrl?: string;
+  options?: BotOption[];
+  listButton?: string;
+  variable?: string;
+  validation?: 'TEXT' | 'NUMBER' | 'EMAIL' | 'PHONE';
+  next?: string;
+}
+
+export interface BotTrigger {
+  id: string;
+  keywords: string[];
+  match: 'EXACT' | 'CONTAINS';
+  startNodeId: string;
+}
+
+export interface BotFlow {
+  nodes: BotNode[];
+  triggers: BotTrigger[];
+  fallback: { mode: 'START' | 'MESSAGE' | 'AI' | 'NONE'; startNodeId?: string; text?: string };
+  ai: { knowledge: string; noAnswerText?: string };
+}
+
+export interface Bot {
+  id: string;
+  accountId: string;
+  name: string;
+  senderNumberId: string | null;
+  isActive: boolean;
+  flow: BotFlow;
+  updatedAt: string;
+  problems: string[];
+}
+
+export interface BotListItem {
+  id: string;
+  name: string;
+  isActive: boolean;
+  accountUsername: string;
+  senderNumberId: string | null;
+  numberPhone: string | null;
+  numberLabel: string | null;
+  updatedAt: string;
+  chats: number;
+  chatsToday: number;
+  handoffs: number;
+  steps: number;
+  keywords: string[];
+  usesAi: boolean;
+}
+
+export interface BotNumber {
+  id: string;
+  service: Service;
+  label: string;
+  phoneNumber: string;
+  brandName: string | null;
+  botId: string | null;
+  botName: string | null;
+}
+
+export interface BotSettings {
+  aiAvailable: boolean;
+  aiDailyLimit: number;
+  idleMinutes: number;
+  handoffHours: number;
+  limits: Record<string, number>;
+}
+
+export interface BotState {
+  status: 'ACTIVE' | 'COMPLETED' | 'HANDOFF';
+  nodeId: string | null;
+  vars: Record<string, string>;
+}
+
+export type RichMessage =
+  | { kind: 'buttons'; body: string; imageUrl?: string; buttons: { id: string; title: string }[] }
+  | { kind: 'list'; body: string; button: string; rows: { id: string; title: string; description?: string }[] }
+  | { kind: 'image'; imageUrl: string; caption?: string };
+
+export type SimMessage = { kind: 'text'; text: string; ai?: boolean } | { kind: 'rich'; rich: RichMessage };
+
+export interface BotSession {
+  id: string;
+  contactPhone: string;
+  contactName: string | null;
+  status: 'ACTIVE' | 'COMPLETED' | 'HANDOFF' | 'ENDED';
+  nodeId: string | null;
+  variables: Record<string, string>;
+  startedAt: string;
+  lastActivityAt: string;
+  handoffUntil: string | null;
+  senderNumberId: string;
 }

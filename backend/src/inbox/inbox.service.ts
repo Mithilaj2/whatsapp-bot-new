@@ -92,6 +92,8 @@ export class InboxService {
         campaignNo: campaigns.campaignNo,
         imageUrl: sql<string | null>`${messages.payload}->>'headerImageUrl'`,
         auto: sql<'normal' | 'optout' | null>`${messages.payload}->>'auto'`,
+        bot: sql<boolean>`(${messages.payload}->>'bot') is not null`,
+        ai: sql<boolean>`coalesce((${messages.payload}->>'ai')::boolean, false)`,
       })
       .from(messages)
       .leftJoin(campaigns, eq(campaigns.id, messages.campaignId))

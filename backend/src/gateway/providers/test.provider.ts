@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { TemplatePayload } from '../../db/schema';
+import type { RichMessage, TemplatePayload } from '../../db/schema';
 import { MessagingProvider, ProviderError, ProviderEvent, SenderCreds, TemplateRef } from './types';
 
 type Emit = (events: ProviderEvent[]) => Promise<void>;
@@ -56,6 +56,10 @@ export class TestProvider implements MessagingProvider {
     return this.send(creds, to);
   }
 
+  sendRich(creds: SenderCreds, to: string, _m: RichMessage) {
+    return this.send(creds, to);
+  }
+
   async createTemplate(_creds: SenderCreds, t: TemplateRef) {
     const id = `test-tpl-${randomUUID().slice(0, 8)}`;
     // Bodies containing "reject" are rejected, so the rejection flow can be tried too
@@ -80,7 +84,7 @@ export class TestProvider implements MessagingProvider {
   }
 
   /** Pretends a contact replied, as if WhatsApp sent us the webhook. */
-  simulateInbound(creds: SenderCreds, from: string, text: string, contactName?: string, replyTo?: string) {
+  simulateInbound(creds: SenderCreds, from: string, text: string, contactName?: string, replyTo?: string, replyId?: string) {
     const id = `test.in.${randomUUID()}`;
     void this.emit([
       {
@@ -90,9 +94,10 @@ export class TestProvider implements MessagingProvider {
         from,
         contactName,
         at: new Date(),
-        type: 'TEXT',
+        type: replyId ? 'INTERACTIVE' : 'TEXT',
         text,
         replyToProviderId: replyTo,
+        replyId,
       },
     ]);
     return id;
