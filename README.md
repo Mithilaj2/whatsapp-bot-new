@@ -16,8 +16,13 @@ tree view, white-label domain and brand per reseller, countries master.
 movement; admin adds/removes credits; resellers give credits to, or take them back from, accounts
 directly under them; balances and transactions pages with filters and CSV export.
 
-Next phases: sending gateway (Meta Cloud API) → Premium Campaigns → Branded Campaigns → Bot Studio →
-dashboard charts. Menu items for these show "Soon" until built.
+**Phase 3 (done):** sending gateway. WhatsApp numbers (Meta Cloud API or test mode), message
+templates with approval tracking, a sending queue with per-number speed limits and retries, signed
+webhooks for delivery/read/failed and replies, admin pages for numbers, templates, test messages and
+the message log.
+
+Next phases: Premium Campaigns → Branded Campaigns → Bot Studio → dashboard charts. Menu items for
+these show "Soon" until built.
 
 ## Run on your computer
 
@@ -68,6 +73,48 @@ Log in with the `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` from `backend/.e
 - An account that still holds credits cannot be deleted.
 - `CreditsService.spend()` and `refund()` are ready for the campaign module (Phase 4).
 
+### Sending (gateway)
+
+- Every message goes through one provider interface (`backend/src/gateway/providers`). `META` is
+  the official WhatsApp Cloud API; `TEST` simulates sent → delivered → read without sending
+  anything (numbers ending in `0000` fail), so the panel can be demoed before Meta is ready.
+- The `messages` table is also the queue: no Redis needed. The worker claims due rows with
+  `FOR UPDATE SKIP LOCKED`, sends each number's messages at its own speed limit, retries temporary
+  WhatsApp errors (rate limits, outages) up to 5 times with growing waits, and fails permanent ones
+  at once. A message interrupted by a crash is marked failed rather than sent twice.
+- Delivery statuses only move forward (a late "delivered" never overwrites "read").
+- Webhooks are accepted only with a valid `X-Hub-Signature-256` from your app secret; every call
+  is logged in `webhook_events`.
+- A reply to a shared number is filed under the account (and campaign) that last messaged that
+  contact from it.
+- Access tokens are stored encrypted with `ENCRYPTION_KEY`.
+- Other modules react to `gateway.message.status`, `gateway.message.received` and
+  `gateway.template.status` events (campaign refunds and opt-outs hook in here in Phase 4).
+
+## Connecting WhatsApp (Meta)
+
+Do this once your Meta business portfolio is verified.
+
+1. **developers.facebook.com → Create app** → type *Business* → link it to your business portfolio
+   → add the **WhatsApp** product.
+2. **App settings → Basic**: copy the *App ID* and *App secret* into `META_APP_ID` and
+   `META_APP_SECRET`.
+3. **Business settings → Users → System users**: add an admin system user, assign it your app and
+   your WhatsApp account with full control, then *Generate token* with
+   `whatsapp_business_messaging` and `whatsapp_business_management`, expiry *Never*. Put it in
+   `META_ACCESS_TOKEN`.
+4. **WhatsApp Manager → Phone numbers**: add your number, set the display name, verify it by SMS.
+5. Pick any long random string for `META_VERIFY_TOKEN`, restart the API.
+6. **App → WhatsApp → Configuration → Webhook**: callback URL
+   `https://<your api domain>/api/webhooks/meta`, verify token = `META_VERIFY_TOKEN`; subscribe to
+   `messages`, `message_template_status_update`, `phone_number_quality_update`.
+7. In the panel: **Masters → WhatsApp numbers → Add number**, paste the *Phone number ID* and
+   *WhatsApp Business Account ID* (App → WhatsApp → API Setup). The panel checks the connection
+   straight away.
+8. **Masters → Templates → New template**, wait for approval, then **Send test** to your own phone.
+
+The webhook URL must be public HTTPS, so this last part works once the API is on a server.
+
 ## Changing the database
 
 1. Edit `backend/src/db/schema.ts`
@@ -77,7 +124,7 @@ Log in with the `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` from `backend/.e
 
 ## Deploying to a server
 
-A VPS (Ubuntu, 2 vCPU / 4 GB) is enough to start. Full step-by-step server instructions come with
-Phase 3, when the sending queue is added. In short: install Node.js 20, PostgreSQL 16 and Redis, run
+A VPS (Ubuntu, 2 vCPU / 4 GB) is enough to start. A full step-by-step guide comes with the first
+deployment. In short: install Node.js 20 and PostgreSQL 16, run
 the backend with `npm run build && npm start` and the frontend with `npm run build && npm start`
 under PM2, and put Nginx with HTTPS in front of both.

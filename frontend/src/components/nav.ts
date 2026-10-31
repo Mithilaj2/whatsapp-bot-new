@@ -11,6 +11,8 @@ import type { AccountType } from '@/lib/api';
 export interface NavLink {
   label: string;
   href: string;
+  /** Account types that can see this link. Everyone who sees the section if omitted. */
+  only?: AccountType[];
   /** Not built yet: shown greyed out so people can see what's coming. */
   soon?: boolean;
 }
@@ -71,6 +73,11 @@ export const nav: NavSection[] = [
     label: 'Masters',
     icon: PublicOutlined,
     only: ['ADMIN', 'RESELLER'],
-    children: [{ label: 'Countries', href: '/countries' }],
+    children: [
+      { label: 'Countries', href: '/countries' },
+      { label: 'WhatsApp numbers', href: '/setup/numbers', only: ['ADMIN'] },
+      { label: 'Templates', href: '/setup/templates', only: ['ADMIN'] },
+      { label: 'Message log', href: '/setup/messages', only: ['ADMIN'] },
+    ],
   },
 ];

@@ -12,12 +12,5 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  # Used from Phase 3 for the message sending queue
-  redis:
-    image: redis:7
-    restart: unless-stopped
-    ports:
-      - '6379:6379'
-
 volumes:
   pgdata:

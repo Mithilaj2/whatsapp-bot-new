@@ -21,7 +21,10 @@ const bubbleActive = {
 
 export default function Sidebar({ me, onNavigate }: { me: Me; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const sections = nav.filter((s) => !s.only || s.only.includes(me.account.type));
+  const type = me.account.type;
+  const sections = nav
+    .filter((s) => !s.only || s.only.includes(type))
+    .map((s) => (s.children ? { ...s, children: s.children.filter((c) => !c.only || c.only.includes(type)) } : s));
   const brandName = me.account.type === 'ADMIN' ? me.account.brandName || me.account.name : me.account.name;
 
   return (

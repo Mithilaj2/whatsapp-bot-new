@@ -15,6 +15,13 @@
       "when": 1793436062467,
       "tag": "0001_credits",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793436875742,
+      "tag": "0002_gateway",
+      "breakpoints": true
     }
   ]
 }

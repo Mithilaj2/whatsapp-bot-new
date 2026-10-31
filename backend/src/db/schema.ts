@@ -1,14 +1,17 @@
 // We Brand 360 - database schema
 // Phase 1: accounts, users, countries. Phase 2: credits ledger and balances.
+// Phase 3: sender numbers, message templates, messages (also the sending queue), webhook log.
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
+  uniqueIndex,
   text,
   timestamp,
   uuid,
@@ -195,4 +198,173 @@ export const creditTransactions = pgTable(
     index('credit_txn_campaign_idx').on(t.campaignId),
     check('credit_txn_amount_not_zero', sql`${t.amount} <> 0`),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Phase 3: sending gateway
+// ---------------------------------------------------------------------------
+
+/** META = official WhatsApp Cloud API. TEST = simulated, for demos and development. */
+export const provider = pgEnum('provider', ['META', 'TEST']);
+export type Provider = (typeof provider.enumValues)[number];
+
+export const senderStatus = pgEnum('sender_status', ['ACTIVE', 'DISABLED']);
+
+/**
+ * WhatsApp numbers messages are sent from. ownerAccountId null = a shared platform number
+ * (Premium); otherwise the number belongs to that customer (Branded).
+ */
+export const senderNumbers = pgTable(
+  'sender_numbers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    label: varchar('label', { length: 120 }).notNull(),
+    provider: provider('provider').notNull(),
+    service: service('service').notNull(),
+    ownerAccountId: uuid('owner_account_id').references(() => accounts.id),
+    phoneNumber: varchar('phone_number', { length: 20 }).notNull(), // digits with country code
+    displayName: varchar('display_name', { length: 120 }),
+    phoneNumberId: varchar('phone_number_id', { length: 64 }).notNull(), // Meta's id for the number
+    wabaId: varchar('waba_id', { length: 64 }).notNull(), // WhatsApp Business Account id
+    accessTokenEnc: text('access_token_enc'), // encrypted; null = use the platform token
+    status: senderStatus('status').notNull().default('ACTIVE'),
+    isDefault: boolean('is_default').notNull().default(false),
+    /** Messages per second this number may send. Meta allows about 80 by default. */
+    ratePerSecond: integer('rate_per_second').notNull().default(20),
+    qualityRating: varchar('quality_rating', { length: 16 }),
+    messagingLimit: varchar('messaging_limit', { length: 32 }),
+    lastError: text('last_error'),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('sender_numbers_provider_phone_id_uq').on(t.provider, t.phoneNumberId)],
+);
+
+export const templateCategory = pgEnum('template_category', ['MARKETING', 'UTILITY']);
+export const templateStatus = pgEnum('template_status', [
+  'DRAFT',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+  'PAUSED',
+  'DISABLED',
+]);
+export type TemplateStatus = (typeof templateStatus.enumValues)[number];
+
+export interface TemplateButton {
+  type: 'PHONE_NUMBER' | 'URL' | 'QUICK_REPLY';
+  text: string;
+  phone?: string;
+  url?: string;
+}
+
+/** What a template looks like. {{1}}, {{2}}... in the body are filled in when sending. */
+export interface TemplateContent {
+  header?: { type: 'IMAGE'; exampleUrl: string } | { type: 'TEXT'; text: string };
+  body: string;
+  bodyExamples?: string[];
+  footer?: string;
+  buttons?: TemplateButton[];
+}
+
+/** Message templates. Meta must approve a template before it can start a conversation. */
+export const messageTemplates = pgTable(
+  'message_templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    senderNumberId: uuid('sender_number_id')
+      .notNull()
+      .references(() => senderNumbers.id),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    name: varchar('name', { length: 512 }).notNull(),
+    language: varchar('language', { length: 10 }).notNull().default('en'),
+    category: templateCategory('category').notNull().default('MARKETING'),
+    content: jsonb('content').$type<TemplateContent>().notNull(),
+    status: templateStatus('status').notNull().default('DRAFT'),
+    providerTemplateId: varchar('provider_template_id', { length: 64 }),
+    rejectionReason: text('rejection_reason'),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('templates_number_name_lang_uq').on(t.senderNumberId, t.name, t.language)],
+);
+
+export const messageDirection = pgEnum('message_direction', ['OUT', 'IN']);
+export const messageStatus = pgEnum('message_status', [
+  'QUEUED',
+  'SENDING',
+  'SENT',
+  'DELIVERED',
+  'READ',
+  'FAILED',
+  'RECEIVED',
+]);
+export type MessageStatus = (typeof messageStatus.enumValues)[number];
+export const messageKind = pgEnum('message_kind', ['TEMPLATE', 'TEXT', 'IMAGE', 'INTERACTIVE', 'OTHER']);
+
+/** What to send for an outgoing template message. */
+export interface TemplatePayload {
+  bodyParams?: string[];
+  headerImageUrl?: string;
+}
+
+/**
+ * Every WhatsApp message in or out. Outgoing rows are also the sending queue: the worker picks
+ * rows with status QUEUED whose next_attempt_at has passed.
+ */
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    senderNumberId: uuid('sender_number_id')
+      .notNull()
+      .references(() => senderNumbers.id),
+    direction: messageDirection('direction').notNull(),
+    contactPhone: varchar('contact_phone', { length: 20 }).notNull(), // digits with country code
+    contactName: varchar('contact_name', { length: 120 }),
+    kind: messageKind('kind').notNull(),
+    templateId: uuid('template_id').references(() => messageTemplates.id),
+    payload: jsonb('payload').$type<TemplatePayload | Record<string, unknown>>(),
+    body: text('body'),
+    status: messageStatus('status').notNull(),
+    providerMessageId: varchar('provider_message_id', { length: 128 }),
+    errorCode: varchar('error_code', { length: 32 }),
+    errorMessage: text('error_message'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+    lockedAt: timestamp('locked_at', { withTimezone: true }),
+    campaignId: uuid('campaign_id'),
+    /** For replies: the outgoing message this one answers, when WhatsApp tells us. */
+    replyToProviderId: varchar('reply_to_provider_id', { length: 128 }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    failedAt: timestamp('failed_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('messages_provider_message_id_uq').on(t.providerMessageId),
+    index('messages_queue_idx').on(t.nextAttemptAt).where(sql`${t.status} = 'QUEUED'`),
+    index('messages_campaign_idx').on(t.campaignId),
+    index('messages_conversation_idx').on(t.senderNumberId, t.contactPhone, t.createdAt),
+    index('messages_account_idx').on(t.accountId, t.createdAt),
+  ],
+);
+
+/** Raw webhook calls, kept for troubleshooting. */
+export const webhookEvents = pgTable(
+  'webhook_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    provider: provider('provider').notNull(),
+    signatureValid: boolean('signature_valid').notNull(),
+    payload: jsonb('payload').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    error: text('error'),
+  },
+  (t) => [index('webhook_events_received_idx').on(t.receivedAt)],
 );

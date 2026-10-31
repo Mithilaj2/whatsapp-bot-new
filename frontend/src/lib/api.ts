@@ -171,3 +171,91 @@ export async function downloadCsv(path: string, query: Record<string, unknown>, 
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+// ---------------------------------------------------------------- gateway (Phase 3)
+
+export type ProviderKind = 'META' | 'TEST';
+export type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAUSED' | 'DISABLED';
+export type MessageStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'RECEIVED';
+
+export interface SenderNumber {
+  id: string;
+  label: string;
+  provider: ProviderKind;
+  service: Service;
+  ownerAccountId: string | null;
+  ownerUsername: string | null;
+  phoneNumber: string;
+  displayName: string | null;
+  phoneNumberId: string;
+  wabaId: string;
+  accessToken: string | null;
+  usesPlatformToken: boolean;
+  status: 'ACTIVE' | 'DISABLED';
+  isDefault: boolean;
+  ratePerSecond: number;
+  qualityRating: string | null;
+  messagingLimit: string | null;
+  lastError: string | null;
+  createdAt: string;
+}
+
+export interface TemplateButton {
+  type: 'PHONE_NUMBER' | 'URL' | 'QUICK_REPLY';
+  text: string;
+  phone?: string;
+  url?: string;
+}
+
+export interface TemplateContent {
+  header?: { type: 'IMAGE'; exampleUrl: string } | { type: 'TEXT'; text: string };
+  body: string;
+  bodyExamples?: string[];
+  footer?: string;
+  buttons?: TemplateButton[];
+}
+
+export interface MessageTemplate {
+  id: string;
+  senderNumberId: string;
+  numberLabel: string;
+  provider: ProviderKind;
+  name: string;
+  language: string;
+  category: 'MARKETING' | 'UTILITY';
+  content: TemplateContent;
+  status: TemplateStatus;
+  rejectionReason: string | null;
+  createdAt: string;
+}
+
+export interface Message {
+  id: string;
+  direction: 'OUT' | 'IN';
+  contactPhone: string;
+  contactName: string | null;
+  kind: string;
+  body: string | null;
+  status: MessageStatus;
+  errorCode: string | null;
+  errorMessage: string | null;
+  attempts: number;
+  campaignId: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  readAt: string | null;
+  failedAt: string | null;
+  numberLabel?: string;
+  accountUsername?: string;
+  templateName?: string | null;
+}
+
+export interface GatewaySetup {
+  webhookUrl: string;
+  verifyTokenSet: boolean;
+  appSecretSet: boolean;
+  platformTokenSet: boolean;
+  appIdSet: boolean;
+  workerRunning: boolean;
+}

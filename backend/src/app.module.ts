@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_GUARD } from '@nestjs/core';
 import { AccountsModule } from './accounts/accounts.module';
 import { AuthModule } from './auth/auth.module';
@@ -10,16 +11,19 @@ import { CountriesModule } from './countries/countries.module';
 import { CreditsModule } from './credits/credits.module';
 import { HealthController } from './common/health.controller';
 import { DbModule } from './db/db.module';
+import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    EventEmitterModule.forRoot(),
     DbModule,
     AuthModule,
     AccountsModule,
     CountriesModule,
     BrandingModule,
     CreditsModule,
+    GatewayModule,
   ],
   controllers: [HealthController],
   providers: [
