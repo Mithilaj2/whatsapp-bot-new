@@ -1,7 +1,9 @@
-// We Brand 360 - database schema (Phase 1: accounts, users, countries)
-import { relations } from 'drizzle-orm';
+// We Brand 360 - database schema
+// Phase 1: accounts, users, countries. Phase 2: credits ledger and balances.
+import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   index,
   integer,
   pgEnum,
@@ -114,3 +116,83 @@ export const accountsRelations = relations(accounts, ({ one, many }) => ({
 export const usersRelations = relations(users, ({ one }) => ({
   account: one(accounts, { fields: [users.accountId], references: [accounts.id] }),
 }));
+
+// ---------------------------------------------------------------------------
+// Phase 2: credits
+// ---------------------------------------------------------------------------
+
+/** The two products. Credits for one cannot be used for the other. */
+export const service = pgEnum('service', ['PREMIUM', 'BRANDED']);
+export type Service = (typeof service.enumValues)[number];
+
+/**
+ * CREDIT / DEBIT     platform admin adds or removes credits (category "platform")
+ * TRANSFER_IN / OUT  credits moved between a parent and a direct child ("transfers")
+ * SPENT / REFUND     a campaign uses credits, failed messages are refunded ("campaign")
+ */
+export const creditTxnType = pgEnum('credit_txn_type', [
+  'CREDIT',
+  'DEBIT',
+  'TRANSFER_IN',
+  'TRANSFER_OUT',
+  'SPENT',
+  'REFUND',
+]);
+export type CreditTxnType = (typeof creditTxnType.enumValues)[number];
+
+/**
+ * Current balance per account x service x country. Only ever changed by CreditsService in the
+ * same database transaction that writes the ledger row, so it always equals the ledger sum.
+ */
+export const creditBalances = pgTable(
+  'credit_balances',
+  {
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    service: service('service').notNull(),
+    countryId: uuid('country_id')
+      .notNull()
+      .references(() => countries.id),
+    balance: integer('balance').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.accountId, t.service, t.countryId] }),
+    check('credit_balances_not_negative', sql`${t.balance} >= 0`),
+  ],
+);
+
+/** Ledger: one row per credit movement. Never updated or deleted. */
+export const creditTransactions = pgTable(
+  'credit_transactions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    service: service('service').notNull(),
+    countryId: uuid('country_id')
+      .notNull()
+      .references(() => countries.id),
+    type: creditTxnType('type').notNull(),
+    /** Positive adds credits, negative removes them. */
+    amount: integer('amount').notNull(),
+    balanceAfter: integer('balance_after').notNull(),
+    /** The other side of a transfer, or the admin account for CREDIT/DEBIT. */
+    counterpartyId: uuid('counterparty_id').references(() => accounts.id),
+    /** Links the OUT and IN rows of one transfer. */
+    groupId: uuid('group_id').notNull().defaultRandom(),
+    campaignId: uuid('campaign_id'),
+    campaignNo: varchar('campaign_no', { length: 12 }),
+    recipients: integer('recipients'),
+    remarks: varchar('remarks', { length: 255 }),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('credit_txn_account_idx').on(t.accountId, t.createdAt),
+    index('credit_txn_campaign_idx').on(t.campaignId),
+    check('credit_txn_amount_not_zero', sql`${t.amount} <> 0`),
+  ],
+);

@@ -114,3 +114,60 @@ export async function api<T>(
   }
   return data as T;
 }
+
+// ---------------------------------------------------------------- credits (Phase 2)
+
+export type Service = 'PREMIUM' | 'BRANDED';
+export type CreditTxnType = 'CREDIT' | 'DEBIT' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'SPENT' | 'REFUND';
+
+export interface Balance {
+  accountId: string;
+  username: string;
+  accountName: string;
+  accountType: AccountType;
+  service: Service;
+  countryCode: string;
+  countryName: string;
+  balance: number;
+  updatedAt: string;
+}
+
+export interface CreditTxn {
+  id: string;
+  createdAt: string;
+  accountId: string;
+  username: string;
+  accountName: string;
+  service: Service;
+  type: CreditTxnType;
+  amount: number;
+  balanceAfter: number;
+  countryCode: string;
+  counterpartyUsername: string | null;
+  counterpartyName: string | null;
+  campaignNo: string | null;
+  recipients: number | null;
+  remarks: string | null;
+  createdBy: string | null;
+}
+
+export interface CreditSummary {
+  totals: Record<Service, number>;
+  byCountry: Balance[];
+}
+
+/** Downloads a CSV export from the API (needs the login token, so a plain link won't work). */
+export async function downloadCsv(path: string, query: Record<string, unknown>, filename: string) {
+  const url = new URL(API_URL + path);
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
+  }
+  const res = await fetch(url, { headers: { authorization: `Bearer ${tokenStore.get() ?? ''}` } });
+  if (!res.ok) throw new ApiError('Export failed. Try again.', res.status);
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}

@@ -147,7 +147,7 @@ export default function AccountDialog({ open, mode, myAccountId, parents, onClos
                   <TextField select label="Add under" value={f.parentId} onChange={set('parentId')}>
                     {parents.map((p) => (
                       <MenuItem key={p.id} value={p.id}>
-                        {p.id === myAccountId ? `${p.name} (you)` : `${p.name} · ${p.username}`}
+                        {p.id === myAccountId ? `${p.name} (you)` : `${p.name} (${p.username})`}
                       </MenuItem>
                     ))}
                   </TextField>

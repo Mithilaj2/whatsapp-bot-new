@@ -7,6 +7,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { BrandingModule } from './branding/branding.module';
 import { CountriesModule } from './countries/countries.module';
+import { CreditsModule } from './credits/credits.module';
 import { HealthController } from './common/health.controller';
 import { DbModule } from './db/db.module';
 
@@ -18,6 +19,7 @@ import { DbModule } from './db/db.module';
     AccountsModule,
     CountriesModule,
     BrandingModule,
+    CreditsModule,
   ],
   controllers: [HealthController],
   providers: [

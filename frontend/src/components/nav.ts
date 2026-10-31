@@ -52,8 +52,8 @@ export const nav: NavSection[] = [
     label: 'Credits',
     icon: AccountBalanceWalletOutlined,
     children: [
-      { label: 'Balances', href: '/credits/balances', soon: true },
-      { label: 'Transactions', href: '/credits/transactions', soon: true },
+      { label: 'Balances', href: '/credits/balances' },
+      { label: 'Transactions', href: '/credits/transactions' },
     ],
   },
   { label: 'Bot Studio', icon: SmartToyOutlined, href: '/bots', soon: true },

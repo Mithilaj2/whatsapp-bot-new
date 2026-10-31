@@ -12,8 +12,12 @@ White-label panel for sending WhatsApp campaigns, with a reseller → customer h
 **Phase 1 (done):** login, roles (Admin / Reseller / Customer), unlimited reseller hierarchy with
 tree view, white-label domain and brand per reseller, countries master.
 
-Next phases: credits ledger → sending gateway (Meta Cloud API) → Premium Campaigns → Branded
-Campaigns → Bot Studio → dashboard charts. Menu items for these show "Soon" until built.
+**Phase 2 (done):** credits per account, service (Premium / Branded) and country; ledger of every
+movement; admin adds/removes credits; resellers give credits to, or take them back from, accounts
+directly under them; balances and transactions pages with filters and CSV export.
+
+Next phases: sending gateway (Meta Cloud API) → Premium Campaigns → Branded Campaigns → Bot Studio →
+dashboard charts. Menu items for these show "Soon" until built.
 
 ## Run on your computer
 
@@ -51,6 +55,18 @@ Log in with the `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` from `backend/.e
   soft: history is kept.
 - Only the platform admin can switch countries on or off.
 - A reseller's domain shows that reseller's brand name and logo on the login page.
+
+### Credits
+
+- 1 credit = 1 message. Premium and Branded credits are separate, and kept per country.
+- The platform admin creates credits (it has no balance of its own). Resellers can only pass on
+  credits they hold, and only to accounts directly under them; they can also take credits back.
+- A balance can never go below zero, even when several transfers happen at the same moment
+  (balance rows are locked during each change).
+- Every change writes a ledger row with the balance after it. `GET /api/credits/reconcile` (admin)
+  checks that every balance equals the sum of its ledger rows.
+- An account that still holds credits cannot be deleted.
+- `CreditsService.spend()` and `refund()` are ready for the campaign module (Phase 4).
 
 ## Changing the database
 

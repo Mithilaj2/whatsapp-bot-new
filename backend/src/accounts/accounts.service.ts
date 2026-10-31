@@ -11,7 +11,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { AuthUser } from '../auth/decorators';
 import { Paginated } from '../common/pagination';
 import { Db, InjectDb } from '../db/db.module';
-import { accountClosure, accounts, users } from '../db/schema';
+import { accountClosure, accounts, creditBalances, users } from '../db/schema';
 import { CreateAccountDto, ListAccountsQuery, UpdateAccountDto } from './dto/account.dto';
 
 const parent = alias(accounts, 'parent');
@@ -268,7 +268,7 @@ export class AccountsService {
     return this.getById(id);
   }
 
-  /** Soft delete. Blocked while the account still has active accounts under it. */
+  /** Soft delete. Blocked while the account still has accounts or credits under it. */
   async remove(actor: AuthUser, id: string) {
     await this.assertInScope(actor.accountId, id, false);
     const [{ children }] = await this.db
@@ -278,6 +278,15 @@ export class AccountsService {
     if (children > 0) {
       throw new BadRequestException(
         `This account has ${children} account(s) under it. Move or delete them first.`,
+      );
+    }
+    const [{ credits }] = await this.db
+      .select({ credits: sql<number>`coalesce(sum(${creditBalances.balance}), 0)`.mapWith(Number) })
+      .from(creditBalances)
+      .where(eq(creditBalances.accountId, id));
+    if (credits > 0) {
+      throw new BadRequestException(
+        `This account still has ${credits.toLocaleString('en-IN')} credits. Take them back in Credits > Transactions first.`,
       );
     }
     await this.db.transaction(async (tx) => {
