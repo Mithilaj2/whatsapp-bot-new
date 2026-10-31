@@ -39,7 +39,15 @@ bot, what to do when nothing matches (start anyway, fixed message, AI answer, no
 from the business information, a test chat that runs the unsaved bot, and a Chats tab with every
 person's answers, hand-overs and CSV download.
 
-Next phase: dashboard charts and notifications.
+**Phase 7 (done):** Dashboard and notifications. Dashboard with period (7 / 30 / 90 days, this
+month, 12 months, custom) and service filters: credits left, campaigns, messages, delivery and read
+rates, replies, bot chats, accounts; charts for messages sent, credit activity, what happened to
+messages, campaigns by status, Premium vs Branded and new accounts, each with a table view.
+Notification bell and page: campaign finished or not approved, credits received or taken back,
+low credits (to the account and its reseller), brand to review / live / sent back, bot hand-over,
+WhatsApp number quality or sending problems.
+
+Next phase: final testing, security checks and the go-live guide.
 
 ## Run on your computer
 
@@ -163,6 +171,17 @@ Log in with the `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` from `backend/.e
   told to answer only from the business information and to say it doesn't know otherwise. At most
   `BOT_AI_DAILY_LIMIT` (20) AI answers per person per day keeps the API bill predictable. The API
   is billed by Anthropic per use, separately from WhatsApp.
+
+### Dashboard and notifications
+
+- Everything on the dashboard covers your own account and every account below you. Days are
+  counted in `APP_TIMEZONE` (Asia/Kolkata). Up to 62 days show per day, up to 200 per week, longer
+  per month; at most two years.
+- Notifications belong to an account (everyone who logs in to it sees the same list) and are kept
+  for `NOTIFICATION_KEEP_DAYS` (90). Low-credit alerts fire when a balance for a country drops below
+  `LOW_CREDIT_THRESHOLD` (100), at most once a day per service and country; the reseller above is
+  told too, so they can top up.
+- The panel checks for new notifications every 30 seconds while it's open.
 
 ## Connecting WhatsApp (Meta)
 

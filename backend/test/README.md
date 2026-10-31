@@ -23,5 +23,6 @@ Plain bash + curl + jq scripts that run against a real API and database.
    bash test/campaigns.e2e.sh
    bash test/branded.e2e.sh
    bash test/bots.e2e.sh
+   bash test/dashboard.e2e.sh
    ```
    Run `accounts` first on a fresh database: it counts all accounts the admin can see.

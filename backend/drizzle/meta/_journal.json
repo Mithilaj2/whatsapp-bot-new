@@ -43,6 +43,13 @@
       "when": 1793440243679,
       "tag": "0005_bots",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793441480138,
+      "tag": "0006_notifications",
+      "breakpoints": true
     }
   ]
 }

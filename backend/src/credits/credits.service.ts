@@ -4,7 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'crypto';
+import { AppEvents } from '../common/events';
 import {
   and,
   asc,
@@ -67,7 +69,10 @@ const counterparty = alias(accounts, 'counterparty');
 
 @Injectable()
 export class CreditsService {
-  constructor(@InjectDb() private readonly db: Db) {}
+  constructor(
+    @InjectDb() private readonly db: Db,
+    private readonly events: EventEmitter2,
+  ) {}
 
   /**
    * The only way credits ever change. Locks the affected balance rows, checks none goes below
@@ -215,6 +220,10 @@ export class CreditsService {
     }
 
     const rows = await this.db.transaction((tx) => this.applyMovements(tx, movements));
+    this.events.emit(AppEvents.CREDITS_MOVED, { groupId: base.groupId });
+    for (const m of movements.filter((x) => x.amount < 0)) {
+      this.events.emit(AppEvents.CREDITS_SPENT, { accountId: m.accountId, service: m.service });
+    }
     return { groupId: base.groupId, transactions: rows };
   }
 

@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents } from '../common/events';
 import { and, count, desc, eq, ilike, isNull, ne, or, SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { inTreeOf } from '../accounts/scope';
@@ -16,6 +18,7 @@ export class BrandsService {
   constructor(
     @InjectDb() private readonly db: Db,
     private readonly config: ConfigService,
+    private readonly events: EventEmitter2,
   ) {}
 
   private mediaUrl(fileName: string) {
@@ -68,6 +71,7 @@ export class BrandsService {
       .insert(brands)
       .values({ ...values, accountId: account.id, submittedByUserId: actor.userId })
       .returning({ id: brands.id });
+    this.events.emit(AppEvents.BRAND_SUBMITTED, { brandId: row.id });
     return this.detail(actor, row.id);
   }
 
@@ -82,6 +86,7 @@ export class BrandsService {
       .update(brands)
       .set({ ...values, status: 'SUBMITTED', updatedAt: new Date() })
       .where(eq(brands.id, id));
+    this.events.emit(AppEvents.BRAND_SUBMITTED, { brandId: id });
     return this.detail(actor, id);
   }
 
@@ -95,6 +100,7 @@ export class BrandsService {
         .update(brands)
         .set({ status: 'REJECTED', reviewNote: dto.note, reviewedByUserId: actor.userId, reviewedAt: new Date() })
         .where(eq(brands.id, id));
+      this.events.emit(AppEvents.BRAND_REVIEWED, { brandId: id });
       return this.detail(actor, id);
     }
 
@@ -127,6 +133,7 @@ export class BrandsService {
         })
         .where(eq(brands.id, id));
     });
+    this.events.emit(AppEvents.BRAND_REVIEWED, { brandId: id });
     return this.detail(actor, id);
   }
 

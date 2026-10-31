@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents } from '../common/events';
 import { randomUUID } from 'crypto';
 import { and, count, desc, eq, inArray, isNull, ne, or, SQL, sql } from 'drizzle-orm';
 import { AuthUser } from '../auth/decorators';
@@ -422,6 +423,8 @@ export class GatewayService implements OnModuleInit {
           status: 'QUEUED' as const,
           // Held messages have no send time, so the worker leaves them alone
           nextAttemptAt: opts.held ? null : ordered ? new Date(now.getTime() + i + j) : now,
+          // Same for the time shown in the inbox, so a bot's replies list in the order sent
+          ...(ordered ? { createdAt: new Date(now.getTime() + i + j) } : {}),
           campaignId: it.campaignId ?? null,
           countryCode: it.countryCode ?? null,
         };
@@ -646,12 +649,21 @@ export class GatewayService implements OnModuleInit {
       digits ? eq(senderNumbers.phoneNumber, digits) : undefined,
     ].filter(Boolean) as SQL[];
     if (!match.length) return;
+    const where = and(eq(senderNumbers.provider, provider), or(...match));
+    const before = await this.db.select({ id: senderNumbers.id, q: senderNumbers.qualityRating }).from(senderNumbers).where(where);
     await this.db
       .update(senderNumbers)
       .set({
         ...(e.qualityRating && { qualityRating: e.qualityRating }),
         ...(e.messagingLimit && { messagingLimit: e.messagingLimit }),
       })
-      .where(and(eq(senderNumbers.provider, provider), or(...match)));
+      .where(where);
+    // Quality going down puts the number at risk of being limited: tell people
+    const q = e.qualityRating?.toUpperCase();
+    for (const b of before) {
+      if (q && q !== b.q?.toUpperCase() && (q === 'YELLOW' || q === 'RED')) {
+        this.events.emit(AppEvents.NUMBER_ALERT, { senderNumberId: b.id, qualityRating: q, previousQuality: b.q });
+      }
+    }
   }
 }

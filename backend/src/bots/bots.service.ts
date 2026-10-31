@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { AppEvents } from '../common/events';
 import { and, count, desc, eq, gt, isNull, ne, or, SQL, sql } from 'drizzle-orm';
 import { inTreeOf } from '../accounts/scope';
 import { AuthUser } from '../auth/decorators';
@@ -104,6 +105,7 @@ export class BotsService {
     private readonly gateway: GatewayService,
     readonly ai: AiService,
     config: ConfigService,
+    private readonly events: EventEmitter2,
   ) {
     this.idleMinutes = Number(config.get('BOT_IDLE_MINUTES', 30));
     this.handoffHours = Number(config.get('BOT_HANDOFF_HOURS', 24));
@@ -406,6 +408,15 @@ export class BotsService {
       }
     } else if (session) {
       await this.db.update(botSessions).set({ lastActivityAt: now }).where(eq(botSessions.id, session.id));
+    }
+
+    if (res.state?.status === 'HANDOFF') {
+      this.events.emit(AppEvents.BOT_HANDOFF, {
+        botId: bot.id,
+        contactPhone: message.contactPhone,
+        contactName: message.contactName,
+        senderNumberId: message.senderNumberId,
+      });
     }
 
     const items: EnqueueItem[] = [];

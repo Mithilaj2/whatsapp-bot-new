@@ -668,3 +668,34 @@ export const botSessions = pgTable(
     index('bot_sessions_bot_idx').on(t.botId, t.lastActivityAt),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Phase 7: notifications
+// ---------------------------------------------------------------------------
+
+export const notificationLevel = pgEnum('notification_level', ['INFO', 'SUCCESS', 'WARNING', 'ERROR']);
+
+/** Bell notifications. Shared by everyone who logs in to the account. */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 40 }).notNull(),
+    level: notificationLevel('level').notNull().default('INFO'),
+    title: varchar('title', { length: 200 }).notNull(),
+    body: text('body'),
+    /** Panel page to open, e.g. /campaigns/premium/reports/<id>. */
+    link: varchar('link', { length: 300 }),
+    /** Stops the same alert twice (e.g. low credits once a day). */
+    dedupeKey: varchar('dedupe_key', { length: 200 }),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('notifications_account_idx').on(t.accountId, t.createdAt),
+    uniqueIndex('notifications_dedupe_uq').on(t.accountId, t.dedupeKey),
+  ],
+);

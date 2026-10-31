@@ -598,3 +598,39 @@ export interface BotSession {
   handoffUntil: string | null;
   senderNumberId: string;
 }
+
+// ---------------------------------------------------------------- dashboard and notifications (Phase 7)
+
+export interface DashboardData {
+  range: { from: string; to: string; days: number; unit: 'day' | 'week' | 'month'; timezone: string };
+  tiles: {
+    balance: { PREMIUM: number; BRANDED: number } | null;
+    resellers: number;
+    customers: number;
+    campaigns: number;
+    messages: number;
+    creditsUsed: number;
+    deliveryRate: number | null;
+    readRate: number | null;
+    replies: number;
+    botChats: number;
+    waitingForTeam: number;
+  };
+  creditActivity: { date: string; received: number; given: number; created: number; removed: number; used: number }[];
+  campaignVolume: { date: string; premiumCampaigns: number; brandedCampaigns: number; premiumMessages: number; brandedMessages: number }[];
+  campaignStatus: Partial<Record<CampaignStatus, number>>;
+  accountGrowth: { date: string; resellers: number; customers: number }[];
+  byService: { service: Service; campaigns: number; messages: number; credits: number }[];
+  delivery: { read: number; delivered: number; sent: number; waiting: number; failed: number; cancelled: number };
+}
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  level: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
+  title: string;
+  body: string | null;
+  link: string | null;
+  readAt: string | null;
+  createdAt: string;
+}

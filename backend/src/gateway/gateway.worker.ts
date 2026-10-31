@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents } from '../common/events';
 import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import { Db, InjectDb } from '../db/db.module';
 import { messages, messageTemplates, senderNumbers, TemplatePayload } from '../db/schema';
@@ -165,6 +166,7 @@ export class GatewayWorker implements OnApplicationBootstrap, OnApplicationShutd
 
     if (err.senderBroken) {
       await this.db.update(senderNumbers).set({ lastError: err.message }).where(eq(senderNumbers.id, n.id));
+      this.events.emit(AppEvents.NUMBER_ALERT, { senderNumberId: n.id, error: err.message });
     }
 
     if (err.retryable && m.attempts < MAX_ATTEMPTS) {

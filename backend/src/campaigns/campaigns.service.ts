@@ -6,7 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { AppEvents } from '../common/events';
 import { createHash, randomInt } from 'crypto';
 import { and, count, desc, eq, ilike, inArray, isNull, or, sql, SQL } from 'drizzle-orm';
 import { inTreeOf } from '../accounts/scope';
@@ -74,6 +75,7 @@ export class CampaignsService {
     private readonly gateway: GatewayService,
     private readonly credits: CreditsService,
     private readonly optOuts: OptOutsService,
+    private readonly events: EventEmitter2,
   ) {
     const demoMax = Number(config.get('CAMPAIGN_DEMO_MAX', 10));
     const max = Number(config.get('CAMPAIGN_MAX_RECIPIENTS', 100000));
@@ -366,6 +368,7 @@ export class CampaignsService {
       return c.id;
     });
 
+    if (charged) this.events.emit(AppEvents.CREDITS_SPENT, { accountId: account.id, service: dto.service });
     // The template may have been approved while we were saving
     if (!approved) await this.applyTemplateStatus(template.id);
     this.log.log(`Campaign ${campaignNo}: ${summary.recipients} recipients${approved ? '' : ', waiting for approval'}`);
@@ -403,15 +406,20 @@ export class CampaignsService {
         });
       } else if (t.status === 'REJECTED' || t.status === 'DISABLED') {
         const reason = `WhatsApp did not approve the message${t.rejectionReason ? `: ${t.rejectionReason}` : ''}`;
+        let rejected = false;
         await this.db.transaction(async (tx) => {
           const [c] = await tx
             .update(campaigns)
             .set({ status: 'REJECTED', rejectionReason: reason, completedAt: new Date() })
             .where(and(eq(campaigns.id, id), eq(campaigns.status, 'PENDING_APPROVAL')))
             .returning();
-          if (c) await this.gateway.cancelQueued(id, reason, tx);
+          if (c) {
+            rejected = true;
+            await this.gateway.cancelQueued(id, reason, tx);
+          }
         });
         await this.refundCampaign(id);
+        if (rejected) this.events.emit(AppEvents.CAMPAIGN_REJECTED, { campaignId: id, reason });
       }
     }
   }
@@ -504,6 +512,7 @@ export class CampaignsService {
     for (const d of done) {
       await this.refundCampaign(d.id);
       this.log.log(`Campaign ${d.no} completed`);
+      this.events.emit(AppEvents.CAMPAIGN_FINISHED, { campaignId: d.id });
     }
   }
 

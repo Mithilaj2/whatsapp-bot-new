@@ -4,6 +4,7 @@ import { Box, CircularProgress, Drawer, IconButton } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AccountMenu from '@/components/AccountMenu';
+import NotificationBell from '@/components/NotificationBell';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/lib/auth';
 import { brand } from '@/lib/theme';
@@ -67,6 +68,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
             <MenuIcon />
           </IconButton>
           <Box sx={{ flex: 1 }} />
+          <NotificationBell />
           <AccountMenu />
         </Box>
         <Box component="main" sx={{ flex: 1, p: { xs: 2, sm: 3, lg: 4 }, maxWidth: 1400, width: '100%' }}>
