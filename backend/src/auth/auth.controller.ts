@@ -1,13 +1,17 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
-import { IsString, MinLength } from 'class-validator';
+import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
+import { clientIp } from '../audit/audit.module';
+import { IsString, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { AuthUser, CurrentUser, Public } from './decorators';
 
 class LoginDto {
   @IsString()
+  @MaxLength(60)
   username: string;
 
   @IsString()
+  @MaxLength(200)
   password: string;
 }
 
@@ -17,6 +21,7 @@ class ChangePasswordDto {
 
   @IsString()
   @MinLength(8, { message: 'New password must be at least 8 characters' })
+  @MaxLength(200)
   newPassword: string;
 }
 
@@ -27,8 +32,8 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(200)
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.username, dto.password);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.auth.login(dto.username, dto.password, clientIp(req));
   }
 
   @Get('me')

@@ -56,7 +56,8 @@ export class WebhooksController {
     const valid = req.rawBody ? this.meta.verifySignature(req.rawBody, signature) : false;
     const [logged] = await this.db
       .insert(webhookEvents)
-      .values({ provider: 'META', signatureValid: valid, payload: req.body ?? {} })
+      // Unsigned calls could be anyone: keep a record, not what they sent
+      .values({ provider: 'META', signatureValid: valid, payload: valid ? (req.body ?? {}) : {} })
       .returning({ id: webhookEvents.id });
 
     // Anyone can call this URL; only act on calls signed with our app secret

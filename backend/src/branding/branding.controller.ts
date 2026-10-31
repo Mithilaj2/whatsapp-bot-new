@@ -1,4 +1,5 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Query } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { and, eq, isNull } from 'drizzle-orm';
 import { Public } from '../auth/decorators';
 import { Db, InjectDb } from '../db/db.module';
@@ -10,7 +11,33 @@ import { accounts } from '../db/schema';
  */
 @Controller('public/branding')
 export class BrandingController {
-  constructor(@InjectDb() private readonly db: Db) {}
+  constructor(
+    @InjectDb() private readonly db: Db,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * Caddy asks this before getting an SSL certificate for a domain (on-demand TLS), so
+   * certificates are only issued for our own domains and resellers' white-label domains.
+   */
+  @Public()
+  @Get('tls-check')
+  async tlsCheck(@Query('domain') raw?: string) {
+    const domain = (raw || '').toLowerCase().trim();
+    const own = (this.config.get<string>('PANEL_DOMAINS', '') || '')
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
+    if (domain && own.includes(domain)) return 'ok';
+    if (!/^[a-z0-9.-]{3,253}$/.test(domain)) throw new NotFoundException();
+    const [row] = await this.db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(eq(accounts.domain, domain), isNull(accounts.deletedAt), eq(accounts.status, 'ACTIVE')))
+      .limit(1);
+    if (!row) throw new NotFoundException();
+    return 'ok';
+  }
 
   @Public()
   @Get()

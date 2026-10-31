@@ -35,7 +35,7 @@ export class JwtAuthGuard implements CanActivate {
 
     // Block users or accounts that were suspended or deleted after the token was issued
     const [row] = await this.db
-      .select({ isActive: users.isActive, status: accounts.status, deletedAt: accounts.deletedAt })
+      .select({ isActive: users.isActive, tokenVersion: users.tokenVersion, status: accounts.status, deletedAt: accounts.deletedAt })
       .from(users)
       .innerJoin(accounts, eq(accounts.id, users.accountId))
       .where(eq(users.id, payload.userId))
@@ -43,6 +43,8 @@ export class JwtAuthGuard implements CanActivate {
     if (!row || !row.isActive || row.status !== 'ACTIVE' || row.deletedAt) {
       throw new UnauthorizedException('This account is not active');
     }
+    // The password changed since this login
+    if ((payload.tv ?? 0) !== row.tokenVersion) throw new UnauthorizedException('Session expired, please log in again');
 
     request.user = {
       userId: payload.userId,

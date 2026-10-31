@@ -261,7 +261,11 @@ export class AccountsService {
         await tx.update(accounts).set(changes).where(eq(accounts.id, id));
       }
       if (dto.name || passwordHash) {
-        await tx.update(users).set({ name: dto.name, passwordHash }).where(ownerLogin);
+        await tx
+          .update(users)
+          // A new password signs the account out everywhere
+          .set({ name: dto.name, passwordHash, ...(passwordHash ? { tokenVersion: sql`${users.tokenVersion} + 1` } : {}) })
+          .where(ownerLogin);
       }
     });
 

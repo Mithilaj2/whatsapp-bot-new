@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { LoginLimiter } from './login-limiter';
 
 @Global()
 @Module({
@@ -22,7 +23,7 @@ import { AuthService } from './auth.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, LoginLimiter],
   exports: [JwtModule],
 })
 export class AuthModule {}

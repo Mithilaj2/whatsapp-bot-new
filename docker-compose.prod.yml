@@ -1,0 +1,66 @@
+# Production: database, API, panel and Caddy (HTTPS) on one server.
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# deploy/setup.sh does all of it for you on a fresh Ubuntu server.
+name: webrand360
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: webrand
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: webrand360
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U webrand -d webrand360']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Not reachable from the internet: only the API talks to it
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://webrand:${POSTGRES_PASSWORD}@db:5432/webrand360
+      UPLOAD_DIR: /data/uploads
+      PORT: '4000'
+      CORS_ORIGINS: ''
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env.production}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

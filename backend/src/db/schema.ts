@@ -100,6 +100,8 @@ export const users = pgTable(
     name: varchar('name', { length: 120 }).notNull(),
     isActive: boolean('is_active').notNull().default(true),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    /** Goes up when the password changes: older logins stop working. */
+    tokenVersion: integer('token_version').notNull().default(0),
     ...timestamps,
   },
   (t) => [index('users_account_idx').on(t.accountId)],
@@ -698,4 +700,26 @@ export const notifications = pgTable(
     index('notifications_account_idx').on(t.accountId, t.createdAt),
     uniqueIndex('notifications_dedupe_uq').on(t.accountId, t.dedupeKey),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Phase 8: activity log
+// ---------------------------------------------------------------------------
+
+/** Who changed what, from where. Never holds passwords or message text. */
+export const auditLogs = pgTable(
+  'audit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** The account of the person who did it (null: failed login for an unknown user). */
+    accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    username: varchar('username', { length: 60 }),
+    action: varchar('action', { length: 80 }).notNull(),
+    targetId: varchar('target_id', { length: 64 }),
+    details: jsonb('details').$type<Record<string, unknown>>(),
+    ip: varchar('ip', { length: 64 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('audit_logs_account_idx').on(t.accountId, t.createdAt), index('audit_logs_created_idx').on(t.createdAt)],
 );

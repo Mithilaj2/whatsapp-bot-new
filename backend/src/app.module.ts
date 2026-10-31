@@ -18,6 +18,7 @@ import { AutoResponderModule } from './autoresponder/autoresponder.module';
 import { BotsModule } from './bots/bots.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AuditModule } from './audit/audit.module';
 import { InboxModule } from './inbox/inbox.module';
 import { MediaModule } from './media/media.module';
 import { OptOutsModule } from './optouts/optouts.module';
@@ -27,6 +28,7 @@ import { OptOutsModule } from './optouts/optouts.module';
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
     DbModule,
+    AuditModule,
     AuthModule,
     AccountsModule,
     CountriesModule,

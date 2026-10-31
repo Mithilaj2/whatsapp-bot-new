@@ -47,7 +47,11 @@ Notification bell and page: campaign finished or not approved, credits received 
 low credits (to the account and its reseller), brand to review / live / sent back, bot hand-over,
 WhatsApp number quality or sending problems.
 
-Next phase: final testing, security checks and the go-live guide.
+**Phase 8 (done):** Security and go-live. Login throttling, sign-out everywhere on password change,
+security headers, production settings check, activity log (Masters), unsigned webhook bodies not
+stored, dependency advisories fixed. Docker setup with Caddy (automatic HTTPS, also for reseller
+domains), database migrations on start, one-command setup, daily backups, restore and update
+scripts. Go-live guide: [DEPLOY.md](DEPLOY.md).
 
 ## Run on your computer
 
@@ -214,9 +218,25 @@ The webhook URL must be public HTTPS, so this last part works once the API is on
 3. `npm run db:migrate`
 4. Commit the new SQL file together with the schema change.
 
+### Security
+
+- Passwords: bcrypt (cost 12). Wrong passwords are limited per username (8) and per address (30)
+  every 15 minutes; unknown usernames take as long as wrong passwords, so they can't be probed.
+- Logins are JWTs with a version: changing or resetting a password logs out every other session.
+  Suspended or deleted accounts are refused on the next request.
+- Every account sees only itself and the accounts below it (checked in each query, covered by the
+  e2e tests). Admin-only pages are blocked for everyone else.
+- WhatsApp tokens are encrypted (AES-256-GCM, `ENCRYPTION_KEY`). Webhooks are only acted on when
+  signed with `META_APP_SECRET`; unsigned calls are refused and their bodies not stored.
+- Uploads: JPEG/PNG only, checked by content, random file names. CSV downloads guard against
+  spreadsheet formulas. Request bodies are limited (5 MB).
+- In production the API refuses to start with weak or test settings and lists what to fix.
+- **Activity log** (Masters, admin and resellers): logins, wrong passwords and every change, with
+  IP address, kept `AUDIT_KEEP_DAYS` (365). Request bodies are never logged.
+
 ## Deploying to a server
 
-A VPS (Ubuntu, 2 vCPU / 4 GB) is enough to start. A full step-by-step guide comes with the first
-deployment. In short: install Node.js 20 and PostgreSQL 16, run
-the backend with `npm run build && npm start` and the frontend with `npm run build && npm start`
-under PM2, and put Nginx with HTTPS in front of both.
+See **[DEPLOY.md](DEPLOY.md)**: buy a VPS, point the domain, run `sudo bash deploy/setup.sh`.
+Everything runs in Docker (`docker-compose.prod.yml`): PostgreSQL, the API, the panel and Caddy for
+HTTPS. Backups: `deploy/backup.sh` (daily via cron), `deploy/restore.sh`; updates:
+`deploy/update.sh`.

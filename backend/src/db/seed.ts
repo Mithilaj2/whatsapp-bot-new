@@ -41,8 +41,9 @@ async function seedAdmin() {
     console.log(`Admin "${username}" already exists, skipped`);
     return;
   }
-  if (!password || password === 'change-me' || password.length < 8) {
-    throw new Error('Set SEED_ADMIN_PASSWORD in .env (at least 8 characters) before seeding');
+  const min = process.env.NODE_ENV === 'production' ? 12 : 8;
+  if (!password || password === 'change-me' || password.length < min) {
+    throw new Error(`Set SEED_ADMIN_PASSWORD in .env (at least ${min} characters) before seeding`);
   }
 
   const passwordHash = await bcrypt.hash(password, 12);

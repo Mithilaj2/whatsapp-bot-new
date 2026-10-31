@@ -1,3 +1,4 @@
+/** Same address as the panel in production ("/api"); the local API while developing. */
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 const TOKEN_KEY = 'wb360_token';
 
@@ -87,7 +88,7 @@ export async function api<T>(
   path: string,
   options: { method?: string; body?: unknown; query?: Record<string, unknown> } = {},
 ): Promise<T> {
-  const url = new URL(API_URL + path);
+  const url = new URL(API_URL + path, typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
   for (const [k, v] of Object.entries(options.query ?? {})) {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
   }
@@ -158,7 +159,7 @@ export interface CreditSummary {
 
 /** Downloads a CSV export from the API (needs the login token, so a plain link won't work). */
 export async function downloadCsv(path: string, query: Record<string, unknown>, filename: string) {
-  const url = new URL(API_URL + path);
+  const url = new URL(API_URL + path, typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
   }

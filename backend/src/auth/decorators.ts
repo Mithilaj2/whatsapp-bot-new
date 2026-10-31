@@ -11,6 +11,8 @@ export const Roles = (...types: AccountType[]) => SetMetadata(ROLES_KEY, types);
 
 /** The logged-in user, as stored in the login token. */
 export interface AuthUser {
+  /** Token version (see users.tokenVersion). */
+  tv?: number;
   userId: string;
   accountId: string;
   accountType: AccountType;

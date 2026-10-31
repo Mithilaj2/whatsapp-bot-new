@@ -17,7 +17,7 @@ import {
   Typography,
 } from '@mui/material';
 import { FormEvent, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, tokenStore } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { typeLabel } from '@/lib/format';
 import { brand } from '@/lib/theme';
@@ -100,7 +100,9 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () =>
     setBusy(true);
     setError('');
     try {
-      await api('/auth/change-password', { method: 'POST', body: { currentPassword: current, newPassword: next } });
+      const r = await api<{ accessToken?: string }>('/auth/change-password', { method: 'POST', body: { currentPassword: current, newPassword: next } });
+      // Other devices are signed out; this one keeps going with a fresh login
+      if (r.accessToken) tokenStore.set(r.accessToken);
       setDone(true);
     } catch (err) {
       setError((err as Error).message);
@@ -117,7 +119,7 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () =>
           <Stack spacing={2} sx={{ pt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
             {done ? (
-              <Alert severity="success">Password changed. Use the new one next time you log in.</Alert>
+              <Alert severity="success">Password changed. You stay logged in here; other devices and browsers are logged out.</Alert>
             ) : (
               <>
                 <TextField

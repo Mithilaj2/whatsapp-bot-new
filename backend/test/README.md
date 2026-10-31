@@ -14,6 +14,7 @@ Plain bash + curl + jq scripts that run against a real API and database.
    CAMPAIGN_MIN_RECIPIENTS=20
    ANTHROPIC_API_KEY="test-ai-key"     # the fake server also answers like the AI
    AI_API_URL="http://localhost:4900"
+   PANEL_DOMAINS="localhost,app.webrand360.com"
    ```
 3. Start the API (`npm run build && npm start`), then run:
    ```
@@ -24,5 +25,6 @@ Plain bash + curl + jq scripts that run against a real API and database.
    bash test/branded.e2e.sh
    bash test/bots.e2e.sh
    bash test/dashboard.e2e.sh
+   bash test/security.e2e.sh
    ```
    Run `accounts` first on a fresh database: it counts all accounts the admin can see.

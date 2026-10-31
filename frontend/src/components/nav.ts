@@ -78,6 +78,7 @@ export const nav: NavSection[] = [
       { label: 'WhatsApp numbers', href: '/setup/numbers', only: ['ADMIN'] },
       { label: 'Templates', href: '/setup/templates', only: ['ADMIN'] },
       { label: 'Message log', href: '/setup/messages', only: ['ADMIN'] },
+      { label: 'Activity log', href: '/activity' },
     ],
   },
 ];
