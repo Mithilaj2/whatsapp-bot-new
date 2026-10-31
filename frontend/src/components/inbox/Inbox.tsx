@@ -226,7 +226,10 @@ export default function Inbox({ service, title }: { service: Service; title: str
                           {m.body || 'Media message'}
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75, mt: 0.5 }}>
-                          {m.campaignNo && (
+                          {m.auto && (
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: brand.pine }}>Auto reply</Typography>
+                          )}
+                          {m.campaignNo && !m.auto && (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, fontSize: '0.75rem', fontWeight: 600, color: brand.action }}>
                               <CampaignOutlined sx={{ fontSize: 14 }} />
                               {m.campaignNo}

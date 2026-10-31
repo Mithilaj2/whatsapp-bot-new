@@ -13,6 +13,8 @@ import { HealthController } from './common/health.controller';
 import { DbModule } from './db/db.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
+import { BrandsModule } from './brands/brands.module';
+import { AutoResponderModule } from './autoresponder/autoresponder.module';
 import { InboxModule } from './inbox/inbox.module';
 import { MediaModule } from './media/media.module';
 import { OptOutsModule } from './optouts/optouts.module';
@@ -32,6 +34,8 @@ import { OptOutsModule } from './optouts/optouts.module';
     OptOutsModule,
     CampaignsModule,
     InboxModule,
+    BrandsModule,
+    AutoResponderModule,
   ],
   controllers: [HealthController],
   providers: [

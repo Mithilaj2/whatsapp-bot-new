@@ -27,6 +27,11 @@ class AddOptOutDto {
 class OptOutsController {
   constructor(private readonly optOuts: OptOutsService) {}
 
+  @Get('numbers')
+  numbers(@CurrentUser() user: AuthUser, @Query() q: OptOutQuery) {
+    return this.optOuts.numbers(user, q.service);
+  }
+
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() q: OptOutQuery) {
     return this.optOuts.list(user, q);

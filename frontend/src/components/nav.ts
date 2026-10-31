@@ -42,12 +42,12 @@ export const nav: NavSection[] = [
     label: 'Branded Campaigns',
     icon: VerifiedOutlined,
     children: [
-      { label: 'New campaign', href: '/campaigns/branded/new', soon: true },
-      { label: 'Onboarding form', href: '/campaigns/branded/onboarding', soon: true },
-      { label: 'Reports', href: '/campaigns/branded/reports', soon: true },
-      { label: 'Auto responder', href: '/campaigns/branded/auto-responder', soon: true },
-      { label: 'Incoming messages', href: '/campaigns/branded/inbox', soon: true },
-      { label: 'Opt-outs', href: '/campaigns/branded/opt-outs', soon: true },
+      { label: 'New campaign', href: '/campaigns/branded/new' },
+      { label: 'Onboarding form', href: '/campaigns/branded/onboarding' },
+      { label: 'Reports', href: '/campaigns/branded/reports' },
+      { label: 'Auto responder', href: '/campaigns/branded/auto-responder' },
+      { label: 'Incoming messages', href: '/campaigns/branded/inbox' },
+      { label: 'Opt-outs', href: '/campaigns/branded/opt-outs' },
     ],
   },
   {

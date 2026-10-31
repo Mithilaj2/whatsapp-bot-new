@@ -8,6 +8,7 @@ import {
   Checkbox,
   FormControlLabel,
   Link as MuiLink,
+  MenuItem,
   Paper,
   Snackbar,
   Table,
@@ -18,21 +19,26 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
 import WhatsAppPreview from '@/components/WhatsAppPreview';
-import { api, CampaignDetail, RecipientCheck, TemplateButton, TreeNode } from '@/lib/api';
+import { ApprovedBrand, api, CampaignDetail, RecipientCheck, Service, TemplateButton, TreeNode } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatNumber } from '@/lib/format';
+import { formatNumber, formatPhone } from '@/lib/format';
 import { brand } from '@/lib/theme';
 import ImageUpload, { Uploaded } from './ImageUpload';
 
 const MESSAGE_MAX = 850;
 
-export default function Composer() {
+export default function Composer({ service }: { service: Service }) {
   const { me } = useAuth();
   const router = useRouter();
+  const branded = service === 'BRANDED';
+  const base = `/campaigns/${service.toLowerCase()}`;
+  const [brands, setBrands] = useState<ApprovedBrand[] | null>(null);
+  const [brandId, setBrandId] = useState('');
   const [accounts, setAccounts] = useState<TreeNode[]>([]);
   const [account, setAccount] = useState<TreeNode | null>(null);
   const [title, setTitle] = useState('');
@@ -65,16 +71,30 @@ export default function Composer() {
     }
   }, [me, isCustomer]);
 
-  // Count numbers and credits a moment after typing stops
   const accountId = account?.id;
+
+  // Branded: the brands this account can send from
   useEffect(() => {
-    if (!numbers.trim()) {
+    if (!branded || !me) return;
+    if (!isCustomer && !accountId) return;
+    setBrands(null);
+    api<ApprovedBrand[]>('/brands/approved', { query: { accountId } })
+      .then((b) => {
+        setBrands(b);
+        setBrandId(b.length === 1 ? b[0].id : '');
+      })
+      .catch(() => setBrands([]));
+  }, [branded, me, isCustomer, accountId]);
+
+  // Count numbers and credits a moment after typing stops
+  useEffect(() => {
+    if (!numbers.trim() || (branded && !brandId)) {
       setCheck(null);
       setCheckError('');
       return;
     }
     const t = setTimeout(() => {
-      api<RecipientCheck>('/campaigns/check', { method: 'POST', body: { service: 'PREMIUM', numbers, accountId } })
+      api<RecipientCheck>('/campaigns/check', { method: 'POST', body: { service, brandId: brandId || undefined, numbers, accountId } })
         .then((c) => {
           setCheck(c);
           setCheckError('');
@@ -82,7 +102,7 @@ export default function Composer() {
         .catch((e) => setCheckError(e.message));
     }, 600);
     return () => clearTimeout(t);
-  }, [numbers, accountId]);
+  }, [numbers, accountId, service, branded, brandId]);
 
   const buttons: TemplateButton[] = useMemo(() => {
     const b: TemplateButton[] = [];
@@ -101,7 +121,9 @@ export default function Composer() {
     }
   }
 
-  const blocker = !title.trim()
+  const blocker = branded && !brandId
+    ? 'Pick a brand'
+    : !title.trim()
     ? 'Add a title'
     : !check || check.recipients === 0
       ? 'Add the phone numbers'
@@ -126,7 +148,8 @@ export default function Composer() {
       const c = await api<CampaignDetail>('/campaigns', {
         method: 'POST',
         body: {
-          service: 'PREMIUM',
+          service,
+          brandId: brandId || undefined,
           accountId,
           title,
           numbers,
@@ -137,7 +160,7 @@ export default function Composer() {
           consent,
         },
       });
-      router.push(`/campaigns/premium/reports/${c.id}?new=1`);
+      router.push(`${base}/reports/${c.id}?new=1`);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -156,11 +179,15 @@ export default function Composer() {
   return (
     <Box component="form" onSubmit={submit}>
       <PageHeader
-        title="New Premium campaign"
-        description="Sent from our shared WhatsApp number. One credit per message."
+        title={branded ? 'New Branded campaign' : 'New Premium campaign'}
+        description={
+          branded
+            ? 'Sent from your own WhatsApp number, with your business name and logo. One Branded credit per message.'
+            : 'Sent from our shared WhatsApp number. One credit per message.'
+        }
         actions={
           <>
-            <Button onClick={() => router.push('/campaigns/premium/reports')}>Cancel</Button>
+            <Button onClick={() => router.push(`${base}/reports`)}>Cancel</Button>
             <Button type="submit" variant="contained" startIcon={<Send />} disabled={Boolean(blocker) || busy}>
               {busy ? 'Submitting…' : check?.isDemo ? 'Send demo' : 'Send campaign'}
             </Button>
@@ -173,7 +200,32 @@ export default function Composer() {
         </Alert>
       )}
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: isCustomer ? '1fr' : '280px 1fr' }, gap: 2, mb: 2 }}>
+      {branded && brands && brands.length === 0 && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          action={
+            <Button component={NextLink} href={`${base}/onboarding`} color="inherit" size="small">
+              Onboarding form
+            </Button>
+          }
+        >
+          {isCustomer || account?.id === me?.account.id ? 'You have' : `${account?.name ?? 'This account'} has`} no approved brand yet.
+          Fill in the onboarding form; once your number is set up, you can send from it here.
+        </Alert>
+      )}
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: [!isCustomer && '280px', branded && '280px', '1fr'].filter(Boolean).join(' '),
+          },
+          gap: 2,
+          mb: 2,
+        }}
+      >
         {!isCustomer && (
           <Autocomplete
             options={accounts}
@@ -183,6 +235,23 @@ export default function Composer() {
             renderInput={(p) => <TextField {...p} label="Send for account" helperText="Credits are taken from this account" />}
             disableClearable={Boolean(account)}
           />
+        )}
+        {branded && (
+          <TextField
+            select
+            label="Brand"
+            value={brandId}
+            onChange={(e) => setBrandId(e.target.value)}
+            helperText={brands?.find((b) => b.id === brandId) ? `Sends from ${formatPhone(brands.find((b) => b.id === brandId)!.phoneNumber)}` : 'Your WhatsApp business'}
+            disabled={!brands || brands.length === 0}
+            required
+          >
+            {brands?.map((b) => (
+              <MenuItem key={b.id} value={b.id}>
+                {b.displayName}
+              </MenuItem>
+            ))}
+          </TextField>
         )}
         <TextField label="Campaign title" value={title} onChange={(e) => setTitle(e.target.value)} helperText="Only you see this" required />
       </Box>
@@ -307,6 +376,7 @@ export default function Composer() {
 
         <Box sx={{ display: 'grid', gap: 2 }}>
           <WhatsAppPreview
+            senderName={brands?.find((b) => b.id === brandId)?.displayName}
             content={{
               header: { type: 'IMAGE', exampleUrl: image?.url ?? '' },
               body: message,

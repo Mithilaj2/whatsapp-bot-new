@@ -1,11 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { and, count, desc, eq, inArray, or, SQL, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, or, SQL, sql } from 'drizzle-orm';
 import { inTreeOf } from '../accounts/scope';
 import { AuthUser } from '../auth/decorators';
 import { parsePhone } from '../common/phone';
 import { Db, InjectDb } from '../db/db.module';
-import { accounts, optOuts, senderNumbers } from '../db/schema';
+import { accounts, brands, optOuts, senderNumbers } from '../db/schema';
 import { GatewayEvents, MessageRow } from '../gateway/gateway.service';
 
 /** Replies that mean "don't message me again" (English and common Indian replies). */
@@ -70,10 +70,13 @@ export class OptOutsService {
           createdAt: optOuts.createdAt,
           numberLabel: senderNumbers.label,
           numberPhone: senderNumbers.phoneNumber,
+          service: senderNumbers.service,
+          brandName: brands.displayName,
           accountUsername: accounts.username,
         })
         .from(optOuts)
         .innerJoin(senderNumbers, eq(senderNumbers.id, optOuts.senderNumberId))
+        .leftJoin(brands, and(eq(brands.senderNumberId, senderNumbers.id), eq(brands.status, 'APPROVED')))
         .leftJoin(accounts, eq(accounts.id, optOuts.accountId));
     const [items, [{ total }]] = await Promise.all([
       base().where(where).orderBy(desc(optOuts.createdAt)).limit(q.pageSize).offset((q.page - 1) * q.pageSize),
@@ -86,11 +89,41 @@ export class OptOutsService {
     return { items, total, page: q.page, pageSize: q.pageSize };
   }
 
+  /**
+   * WhatsApp numbers I can block contacts for: the shared Premium number, plus the numbers of
+   * brands in my part of the tree. The platform admin: every number.
+   */
+  async numbers(actor: AuthUser, service?: 'PREMIUM' | 'BRANDED') {
+    return this.db
+      .select({
+        id: senderNumbers.id,
+        service: senderNumbers.service,
+        label: senderNumbers.label,
+        phoneNumber: senderNumbers.phoneNumber,
+        brandName: brands.displayName,
+      })
+      .from(senderNumbers)
+      .leftJoin(brands, and(eq(brands.senderNumberId, senderNumbers.id), eq(brands.status, 'APPROVED')))
+      .where(and(this.numberScope(actor), service ? eq(senderNumbers.service, service) : undefined))
+      .orderBy(senderNumbers.service, senderNumbers.label);
+  }
+
+  private numberScope(actor: AuthUser) {
+    if (actor.accountType === 'ADMIN') return undefined;
+    return or(
+      and(eq(senderNumbers.service, 'PREMIUM'), isNull(senderNumbers.ownerAccountId), eq(senderNumbers.isDefault, true)),
+      sql`${senderNumbers.ownerAccountId} in (select descendant_id from account_closure where ancestor_id = ${actor.accountId})`,
+    );
+  }
+
   /** Manually block a number (e.g. someone asked by phone not to be messaged). */
   async add(actor: AuthUser, senderNumberId: string, phone: string, remarks?: string) {
     const p = parsePhone(phone);
     if (!p) throw new BadRequestException('That phone number does not look right');
-    const [n] = await this.db.select({ id: senderNumbers.id }).from(senderNumbers).where(eq(senderNumbers.id, senderNumberId));
+    const [n] = await this.db
+      .select({ id: senderNumbers.id })
+      .from(senderNumbers)
+      .where(and(eq(senderNumbers.id, senderNumberId), this.numberScope(actor)));
     if (!n) throw new NotFoundException('Sender number not found');
     const [row] = await this.db
       .insert(optOuts)

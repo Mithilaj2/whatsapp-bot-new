@@ -2,6 +2,7 @@
 // Phase 1: accounts, users, countries. Phase 2: credits ledger and balances.
 // Phase 3: sender numbers, message templates, messages (also the sending queue), webhook log.
 // Phase 4: campaigns, opt-outs, uploaded media.
+// Phase 5: brands (onboarding), auto responders.
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
@@ -316,6 +317,8 @@ export const messageKind = pgEnum('message_kind', ['TEMPLATE', 'TEXT', 'IMAGE', 
 export interface TemplatePayload {
   bodyParams?: string[];
   headerImageUrl?: string;
+  /** Set on automatic replies, so we know what was already sent to a contact. */
+  auto?: 'normal' | 'optout';
 }
 
 /**
@@ -440,6 +443,8 @@ export const campaigns = pgTable(
     templateId: uuid('template_id')
       .notNull()
       .references(() => messageTemplates.id),
+    /** Branded campaigns: the customer's brand (and so their own number). */
+    brandId: uuid('brand_id'),
     content: jsonb('content').$type<CampaignContent>().notNull(),
     status: campaignStatus('status').notNull(),
     isDemo: boolean('is_demo').notNull().default(false),
@@ -482,3 +487,63 @@ export const optOuts = pgTable(
   },
   (t) => [uniqueIndex('opt_outs_number_contact_uq').on(t.senderNumberId, t.contactPhone)],
 );
+
+// ---------------------------------------------------------------------------
+// Phase 5: branded campaigns
+// ---------------------------------------------------------------------------
+
+export const brandStatus = pgEnum('brand_status', ['SUBMITTED', 'APPROVED', 'REJECTED']);
+export type BrandStatus = (typeof brandStatus.enumValues)[number];
+
+/**
+ * A customer's own WhatsApp brand, from the onboarding form. Once the platform admin has set up
+ * the customer's number with WhatsApp, approving the brand links that number and the customer
+ * can send Branded campaigns from it.
+ */
+export const brands = pgTable(
+  'brands',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    organizationName: varchar('organization_name', { length: 150 }).notNull(),
+    displayName: varchar('display_name', { length: 100 }).notNull(), // name shown on WhatsApp
+    category: varchar('category', { length: 60 }).notNull(),
+    description: text('description'),
+    website: varchar('website', { length: 255 }),
+    email: varchar('email', { length: 254 }).notNull(),
+    phoneNumber: varchar('phone_number', { length: 20 }).notNull(), // number to register, digits
+    address: text('address').notNull(),
+    taxId: varchar('tax_id', { length: 30 }),
+    contactName: varchar('contact_name', { length: 120 }).notNull(),
+    logoMediaId: uuid('logo_media_id').references(() => media.id),
+    status: brandStatus('status').notNull().default('SUBMITTED'),
+    reviewNote: text('review_note'),
+    senderNumberId: uuid('sender_number_id').references(() => senderNumbers.id),
+    submittedByUserId: uuid('submitted_by_user_id').references(() => users.id),
+    reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('brands_account_idx').on(t.accountId)],
+);
+
+/** Automatic replies for a WhatsApp number. */
+export const autoResponders = pgTable('auto_responders', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  senderNumberId: uuid('sender_number_id')
+    .notNull()
+    .unique()
+    .references(() => senderNumbers.id),
+  accountId: uuid('account_id')
+    .notNull()
+    .references(() => accounts.id),
+  name: varchar('name', { length: 120 }).notNull(),
+  /** Sent when someone writes (at most once a day per person). Empty = off. */
+  normalMessage: text('normal_message'),
+  /** Sent when someone replies STOP. Empty = off. */
+  optOutMessage: text('opt_out_message'),
+  isActive: boolean('is_active').notNull().default(true),
+  ...timestamps,
+});

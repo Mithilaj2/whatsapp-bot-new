@@ -113,8 +113,8 @@ export default function DashboardPage() {
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Typography variant="h3">Coming next</Typography>
         <Typography color="text.secondary" sx={{ mt: 0.5, maxWidth: '65ch' }}>
-          Branded Campaigns, Bot Studio and charts for your campaigns are being built. They will appear in the
-          menu as each one goes live.
+          Bot Studio and charts for your campaigns are being built. They will appear in the menu as each one goes
+          live.
         </Typography>
       </Paper>
     </>

@@ -7,6 +7,7 @@ import {
   CampaignsQuery,
   CheckRecipientsDto,
   CreateCampaignDto,
+  LimitsQuery,
   MESSAGE_MAX,
   RecipientsQuery,
 } from './campaigns.dto';
@@ -28,8 +29,8 @@ export class CampaignsController {
 
   /** Recipient limits and message length, for the composer. */
   @Get('limits')
-  limits() {
-    return { ...this.campaigns.limits, messageMax: MESSAGE_MAX };
+  limits(@Query() q: LimitsQuery) {
+    return { ...this.campaigns.limitsFor(q.service ?? 'PREMIUM'), messageMax: MESSAGE_MAX };
   }
 
   @Get('defaults')

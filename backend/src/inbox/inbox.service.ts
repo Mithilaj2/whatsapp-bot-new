@@ -91,6 +91,7 @@ export class InboxService {
         campaignId: messages.campaignId,
         campaignNo: campaigns.campaignNo,
         imageUrl: sql<string | null>`${messages.payload}->>'headerImageUrl'`,
+        auto: sql<'normal' | 'optout' | null>`${messages.payload}->>'auto'`,
       })
       .from(messages)
       .leftJoin(campaigns, eq(campaigns.id, messages.campaignId))

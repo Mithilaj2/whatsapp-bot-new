@@ -16,6 +16,7 @@ import { CreditsService } from '../credits/credits.service';
 import { Db, InjectDb } from '../db/db.module';
 import {
   accounts,
+  brands,
   CampaignContent,
   CampaignCountry,
   campaigns,
@@ -23,6 +24,7 @@ import {
   media,
   messages,
   messageTemplates,
+  senderNumbers,
   TemplateButton,
   users,
 } from '../db/schema';
@@ -38,6 +40,12 @@ import {
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type Campaign = typeof campaigns.$inferSelect;
+type Service = 'PREMIUM' | 'BRANDED';
+interface Limits {
+  demoMax: number;
+  min: number;
+  max: number;
+}
 
 const FOOTER = 'Reply STOP to unsubscribe';
 /** No 0/O or 1/I so campaign numbers are easy to read out. */
@@ -58,7 +66,7 @@ export interface RecipientSummary {
 @Injectable()
 export class CampaignsService {
   private readonly log = new Logger('Campaigns');
-  readonly limits: { demoMax: number; min: number; max: number };
+  private readonly limits: Record<Service, Limits>;
 
   constructor(
     @InjectDb() private readonly db: Db,
@@ -67,11 +75,17 @@ export class CampaignsService {
     private readonly credits: CreditsService,
     private readonly optOuts: OptOutsService,
   ) {
+    const demoMax = Number(config.get('CAMPAIGN_DEMO_MAX', 10));
+    const max = Number(config.get('CAMPAIGN_MAX_RECIPIENTS', 100000));
     this.limits = {
-      demoMax: Number(config.get('CAMPAIGN_DEMO_MAX', 10)),
-      min: Number(config.get('CAMPAIGN_MIN_RECIPIENTS', 1000)),
-      max: Number(config.get('CAMPAIGN_MAX_RECIPIENTS', 100000)),
+      PREMIUM: { demoMax, max, min: Number(config.get('CAMPAIGN_MIN_RECIPIENTS', 1000)) },
+      // Customers send from their own number, so small lists are fine
+      BRANDED: { demoMax, max, min: Number(config.get('CAMPAIGN_BRANDED_MIN', 11)) },
     };
+  }
+
+  limitsFor(service: Service): Limits {
+    return this.limits[service];
   }
 
   // ------------------------------------------------------------ who and from where
@@ -88,10 +102,25 @@ export class CampaignsService {
     return acc;
   }
 
-  private async senderFor(service: 'PREMIUM'): Promise<SenderNumber> {
-    const n = await this.gateway.defaultNumber(service);
-    if (!n) throw new BadRequestException('Sending is not set up yet: no WhatsApp number for Premium Campaigns. Contact your provider.');
-    return n;
+  /** Premium: the platform's shared number. Branded: the number of the account's approved brand. */
+  private async senderFor(service: Service, accountId: string, brandId?: string): Promise<{ number: SenderNumber; brandId: string | null }> {
+    if (service === 'PREMIUM') {
+      const n = await this.gateway.defaultNumber(service);
+      if (!n) throw new BadRequestException('Sending is not set up yet: no WhatsApp number for Premium Campaigns. Contact your provider.');
+      return { number: n, brandId: null };
+    }
+    if (!brandId) throw new BadRequestException('Pick a brand');
+    const [row] = await this.db
+      .select({ brand: brands, number: senderNumbers })
+      .from(brands)
+      .leftJoin(senderNumbers, eq(senderNumbers.id, brands.senderNumberId))
+      .where(and(eq(brands.id, brandId), eq(brands.accountId, accountId)));
+    if (!row) throw new NotFoundException('Brand not found for this account');
+    if (row.brand.status !== 'APPROVED' || !row.number) throw new BadRequestException('This brand is not approved yet');
+    if (row.number.status !== 'ACTIVE') {
+      throw new BadRequestException(`The WhatsApp number of ${row.brand.displayName} can't send right now. Contact your provider.`);
+    }
+    return { number: row.number, brandId: row.brand.id };
   }
 
   // ------------------------------------------------------------ recipients
@@ -157,8 +186,8 @@ export class CampaignsService {
   }
 
   /** What's wrong with this many recipients, if anything. */
-  private limitProblem(n: number): string | null {
-    const { demoMax, min, max } = this.limits;
+  private limitProblem(service: Service, n: number): string | null {
+    const { demoMax, min, max } = this.limits[service];
     if (n === 0) return 'No valid numbers to send to';
     if (n <= demoMax) return null;
     if (n < min) return `A full campaign needs at least ${min.toLocaleString('en-IN')} numbers (up to ${demoMax} counts as a demo)`;
@@ -169,7 +198,7 @@ export class CampaignsService {
   /** Live check for the composer: counts, credits needed per country, and whether there's enough. */
   async check(actor: AuthUser, dto: CheckRecipientsDto) {
     const account = await this.resolveAccount(actor, dto.accountId);
-    const number = await this.senderFor(dto.service);
+    const { number } = await this.senderFor(dto.service, account.id, dto.brandId);
     const { summary } = await this.parseRecipients(dto.numbers, number.id);
     const charged = account.type !== 'ADMIN';
     const balances = charged ? await this.credits.summary({ ...actor, accountId: account.id }) : null;
@@ -183,9 +212,9 @@ export class CampaignsService {
       byCountry: countries,
       creditsNeeded: charged ? summary.recipients : 0,
       enoughCredits: countries.every((c) => c.enough),
-      isDemo: summary.recipients > 0 && summary.recipients <= this.limits.demoMax,
-      problem: this.limitProblem(summary.recipients),
-      limits: this.limits,
+      isDemo: summary.recipients > 0 && summary.recipients <= this.limits[dto.service].demoMax,
+      problem: this.limitProblem(dto.service, summary.recipients),
+      limits: this.limits[dto.service],
     };
   }
 
@@ -251,10 +280,10 @@ export class CampaignsService {
 
   async create(actor: AuthUser, dto: CreateCampaignDto) {
     const account = await this.resolveAccount(actor, dto.accountId);
-    const number = await this.senderFor(dto.service);
+    const { number, brandId } = await this.senderFor(dto.service, account.id, dto.brandId);
 
     const { summary, recipients, countryIds } = await this.parseRecipients(dto.numbers, number.id);
-    const problem = this.limitProblem(summary.recipients);
+    const problem = this.limitProblem(dto.service, summary.recipients);
     if (problem) throw new BadRequestException(problem);
 
     const [img] = await this.db.select().from(media).where(eq(media.id, dto.mediaId));
@@ -289,10 +318,11 @@ export class CampaignsService {
           service: dto.service,
           title: dto.title,
           senderNumberId: number.id,
+          brandId,
           templateId: template.id,
           content,
           status: approved ? 'SENDING' : 'PENDING_APPROVAL',
-          isDemo: summary.recipients <= this.limits.demoMax,
+          isDemo: summary.recipients <= this.limits[dto.service].demoMax,
           totalNumbers: summary.total,
           invalidNumbers: summary.invalid + summary.countryOff,
           duplicateNumbers: summary.duplicates,
@@ -541,6 +571,7 @@ export class CampaignsService {
     accountUsername: accounts.username,
     accountName: accounts.name,
     service: campaigns.service,
+    brandName: brands.displayName,
     title: campaigns.title,
     status: campaigns.status,
     isDemo: campaigns.isDemo,
@@ -559,7 +590,14 @@ export class CampaignsService {
     if (q.accountId) f.push(eq(campaigns.accountId, q.accountId));
     if (q.search?.trim()) {
       const s = `%${q.search.trim()}%`;
-      f.push(or(ilike(campaigns.campaignNo, s), ilike(campaigns.title, s), ilike(accounts.username, s)));
+      f.push(
+        or(
+          ilike(campaigns.campaignNo, s),
+          ilike(campaigns.title, s),
+          ilike(accounts.username, s),
+          sql`exists (select 1 from ${brands} b where b.id = ${campaigns.brandId} and b.display_name ilike ${s})`,
+        ),
+      );
     }
     const where = and(...f);
     const [rows, [{ total }]] = await Promise.all([
@@ -567,6 +605,7 @@ export class CampaignsService {
         .select(this.columns)
         .from(campaigns)
         .innerJoin(accounts, eq(accounts.id, campaigns.accountId))
+        .leftJoin(brands, eq(brands.id, campaigns.brandId))
         .where(where)
         .orderBy(desc(campaigns.submittedAt))
         .limit(q.pageSize)
@@ -584,7 +623,7 @@ export class CampaignsService {
 
   async detail(actor: AuthUser, id: string) {
     const c = await this.getInScope(actor, id);
-    const [[acc], stats, reasons, [creator], [tpl]] = await Promise.all([
+    const [[acc], stats, reasons, [creator], [tpl], [brand], [num]] = await Promise.all([
       this.db.select({ username: accounts.username, name: accounts.name }).from(accounts).where(eq(accounts.id, c.accountId)),
       this.stats([id]),
       this.db
@@ -598,6 +637,10 @@ export class CampaignsService {
         ? this.db.select({ username: users.username }).from(users).where(eq(users.id, c.createdByUserId))
         : Promise.resolve([undefined]),
       this.db.select({ status: messageTemplates.status }).from(messageTemplates).where(eq(messageTemplates.id, c.templateId)),
+      c.brandId
+        ? this.db.select({ displayName: brands.displayName }).from(brands).where(eq(brands.id, c.brandId))
+        : Promise.resolve([undefined]),
+      this.db.select({ phoneNumber: senderNumbers.phoneNumber }).from(senderNumbers).where(eq(senderNumbers.id, c.senderNumberId)),
     ]);
     return {
       ...c,
@@ -605,6 +648,9 @@ export class CampaignsService {
       accountName: acc?.name,
       createdBy: creator?.username ?? null,
       templateStatus: tpl?.status,
+      brandName: brand?.displayName ?? null,
+      // Branded campaigns go from the customer's own number, so show it
+      senderPhone: c.service === 'BRANDED' ? (num?.phoneNumber ?? null) : null,
       stats: stats.get(id) ?? null,
       failureReasons: reasons,
     };

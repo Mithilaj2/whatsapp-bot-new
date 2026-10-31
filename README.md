@@ -27,8 +27,13 @@ defaults, live WhatsApp preview and credits per country; campaigns for yourself 
 below you; reports with live delivery, failure reasons, recipient list, CSV download and stop;
 incoming-messages inbox with campaign tags and 24-hour replies; automatic STOP opt-outs.
 
-Next phases: Branded Campaigns → Bot Studio → dashboard charts. Menu items for these show "Soon"
-until built.
+**Phase 5 (done):** Branded Campaigns. Onboarding form (business details, logo, number to use)
+with admin review: send back with a note, or approve and link the customer's own WhatsApp number.
+Branded composer with brand selector, preview under the brand's name, Branded credits and a lower
+minimum; branded reports, incoming messages, auto responder (normal reply and STOP reply) and an
+opt-outs page with manual blocking.
+
+Next phases: Bot Studio → dashboard charts. Menu items for these show "Soon" until built.
 
 ## Run on your computer
 
@@ -115,6 +120,25 @@ Log in with the `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` from `backend/.e
   by link. Back that folder up with the database.
 - Inbox replies are free-form text and only possible within 24 hours of the contact's last
   message (WhatsApp rule). They are not charged in credits.
+
+### Branded Campaigns
+
+- A customer (or their reseller) fills in the **Onboarding form**. The platform admin registers that
+  number in Meta (WhatsApp Manager → add phone number, or under the customer's own WhatsApp
+  account), adds it under **Masters → WhatsApp numbers** as a *Branded* number, then opens the
+  brand and **Approves**, picking that number. The number is then owned by the customer's account.
+- A number can belong to only one live brand. A live brand's details are locked; a brand that was
+  sent back can be fixed and sent again.
+- Branded campaigns send from the brand's number, take **Branded** credits, and each number gets its
+  own templates (WhatsApp approves templates per business account). Minimum recipients for a full
+  campaign: `CAMPAIGN_BRANDED_MIN` (11).
+- **Auto responder** (per number): a reply when someone writes, at most once a day per person so it
+  never loops with another bot; and a reply when someone sends STOP. Both are free-form messages
+  inside the 24-hour window, so no credits.
+- **Opt-outs**: customers can block contacts on their own numbers and on the shared Premium number;
+  not on numbers that belong to someone else.
+- Later: once We Brand 360 is a Meta *Tech Provider*, customers can connect their own number with
+  Embedded Signup instead of the admin doing it.
 
 ## Connecting WhatsApp (Meta)
 

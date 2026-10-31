@@ -8,6 +8,7 @@ import {
   IsUUID,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { PageQuery } from '../common/pagination';
 
@@ -23,8 +24,13 @@ export class CheckRecipientsDto {
   @IsUUID()
   accountId?: string;
 
-  @IsIn(['PREMIUM'])
-  service: 'PREMIUM';
+  @IsIn(['PREMIUM', 'BRANDED'])
+  service: 'PREMIUM' | 'BRANDED';
+
+  /** Branded Campaigns: which of the account's approved brands sends it. */
+  @ValidateIf((o) => o.service === 'BRANDED')
+  @IsUUID('all', { message: 'Pick a brand' })
+  brandId?: string;
 
   /** Phone numbers, one per line (commas and semicolons also work). */
   @IsString()
@@ -103,4 +109,10 @@ export class RecipientsQuery extends PageQuery {
   @IsOptional()
   @IsIn(['QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED', 'CANCELLED'])
   status?: string;
+}
+
+export class LimitsQuery {
+  @IsOptional()
+  @IsIn(['PREMIUM', 'BRANDED'])
+  service?: 'PREMIUM' | 'BRANDED';
 }

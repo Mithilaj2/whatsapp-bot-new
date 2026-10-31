@@ -290,6 +290,7 @@ export interface CampaignListItem {
   accountUsername: string;
   accountName: string;
   service: Service;
+  brandName: string | null;
   title: string;
   status: CampaignStatus;
   isDemo: boolean;
@@ -312,6 +313,8 @@ export interface CampaignDetail extends CampaignListItem {
   rejectionReason: string | null;
   createdBy: string | null;
   templateStatus: TemplateStatus;
+  /** Branded: the customer's own number it was sent from. */
+  senderPhone: string | null;
   failureReasons: { reason: string | null; code: string | null; n: number }[];
 }
 
@@ -368,6 +371,8 @@ export interface ThreadMessage {
   campaignId: string | null;
   campaignNo: string | null;
   imageUrl: string | null;
+  /** Sent by the auto responder. */
+  auto: 'normal' | 'optout' | null;
 }
 
 export interface Thread {
@@ -393,4 +398,90 @@ export async function uploadFile<T>(path: string, file: File): Promise<T> {
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError((Array.isArray(data?.message) ? data.message[0] : data?.message) || 'Upload failed', res.status);
   return data as T;
+}
+
+// ---------------------------------------------------------------- branded (Phase 5)
+
+export type BrandStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+
+export interface BrandForm {
+  accountId?: string;
+  organizationName: string;
+  displayName: string;
+  category: string;
+  description?: string;
+  website?: string;
+  email: string;
+  phoneNumber: string;
+  address: string;
+  taxId?: string;
+  contactName: string;
+  logoMediaId?: string;
+}
+
+export interface Brand extends Required<Omit<BrandForm, 'accountId' | 'logoMediaId'>> {
+  id: string;
+  accountId: string;
+  accountUsername: string;
+  accountName: string;
+  logoMediaId: string | null;
+  logoUrl: string | null;
+  status: BrandStatus;
+  reviewNote: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  senderNumberId: string | null;
+  number: { phoneNumber: string; label: string; status: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApprovedBrand {
+  id: string;
+  displayName: string;
+  organizationName: string;
+  phoneNumber: string;
+  numberStatus: string;
+  logoUrl: string | null;
+}
+
+export interface AutoResponder {
+  id: string;
+  name: string;
+  normalMessage: string | null;
+  optOutMessage: string | null;
+  isActive: boolean;
+  updatedAt: string;
+}
+
+export interface AutoResponderRow {
+  senderNumberId: string;
+  service: Service;
+  phoneNumber: string;
+  label: string;
+  brandName: string | null;
+  accountUsername: string | null;
+  responder: AutoResponder | null;
+}
+
+export interface OptOut {
+  id: string;
+  contactPhone: string;
+  contactName: string | null;
+  mode: 'AUTO' | 'MANUAL';
+  remarks: string | null;
+  createdAt: string;
+  numberLabel: string;
+  numberPhone: string;
+  service: Service;
+  brandName: string | null;
+  accountUsername: string | null;
+}
+
+export interface OptOutNumber {
+  id: string;
+  service: Service;
+  label: string;
+  phoneNumber: string;
+  brandName: string | null;
 }
